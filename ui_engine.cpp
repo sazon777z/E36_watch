@@ -256,9 +256,9 @@ void UiEngine::drawObcTelemetryScreen(bool fullRedraw) {
     // Обновление вольтметра
     tft.fillRect(16, 56, 133, 40, COLOR_BLACK);
     uint16_t vCol = COLOR_BMW_AMBER_BRIGHT;
-    if (sens.voltStatus == VoltageStatus::CRITICAL_LOW || sens.voltStatus == VoltageStatus::OVERCHARGE) {
+    if (sens.voltStatus == VoltageStatus::VOLT_CRITICAL_LOW || sens.voltStatus == VoltageStatus::VOLT_OVERCHARGE) {
         vCol = COLOR_STATUS_ERR;
-    } else if (sens.voltStatus == VoltageStatus::NORMAL_RUNNING) {
+    } else if (sens.voltStatus == VoltageStatus::VOLT_NORMAL_RUNNING) {
         vCol = COLOR_STATUS_OK;
     }
 
@@ -276,22 +276,22 @@ void UiEngine::drawObcTelemetryScreen(bool fullRedraw) {
     tft.setTextColor(COLOR_BMW_AMBER_MAIN);
     tft.setCursor(18, 104);
     switch (sens.voltStatus) {
-        case VoltageStatus::CRITICAL_LOW:
+        case VoltageStatus::VOLT_CRITICAL_LOW:
             tft.setTextColor(COLOR_STATUS_ERR);
             tft.print("АКБ РАЗРЯЖЕН!");
             break;
-        case VoltageStatus::LOW:
+        case VoltageStatus::VOLT_LOW:
             tft.setTextColor(COLOR_STATUS_WARN);
             tft.print("НИЗКИЙ ЗАРЯД");
             break;
-        case VoltageStatus::NORMAL_REST:
+        case VoltageStatus::VOLT_NORMAL_REST:
             tft.print("ЗАЖИГАНИЕ ВКЛ");
             break;
-        case VoltageStatus::NORMAL_RUNNING:
+        case VoltageStatus::VOLT_NORMAL_RUNNING:
             tft.setTextColor(COLOR_STATUS_OK);
             tft.print("ЗАРЯД ГЕНЕРАТОРА: ОК");
             break;
-        case VoltageStatus::OVERCHARGE:
+        case VoltageStatus::VOLT_OVERCHARGE:
             tft.setTextColor(COLOR_STATUS_ERR);
             tft.print("ПЕРЕЗАРЯД >14.8V!");
             break;

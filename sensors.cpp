@@ -11,7 +11,7 @@ SensorsManager::SensorsManager()
     data.batteryVoltage = 12.6f;
     data.minCrankVoltage = 12.6f;
     data.maxVoltage = 12.6f;
-    data.voltStatus = VoltageStatus::NORMAL_REST;
+    data.voltStatus = VoltageStatus::VOLT_NORMAL_REST;
     data.tempOutdoor = 21.5f;
     data.tempCabin = 22.0f;
     data.headlightsOn = false;
@@ -64,15 +64,15 @@ void SensorsManager::updateBatteryVoltage() {
 
     // Классификация статуса напряжения
     if (data.batteryVoltage < 11.5f) {
-        data.voltStatus = VoltageStatus::CRITICAL_LOW;
+        data.voltStatus = VoltageStatus::VOLT_CRITICAL_LOW;
     } else if (data.batteryVoltage < 12.2f) {
-        data.voltStatus = VoltageStatus::LOW;
+        data.voltStatus = VoltageStatus::VOLT_LOW;
     } else if (data.batteryVoltage <= 13.2f) {
-        data.voltStatus = VoltageStatus::NORMAL_REST;
+        data.voltStatus = VoltageStatus::VOLT_NORMAL_REST;
     } else if (data.batteryVoltage <= 14.7f) {
-        data.voltStatus = VoltageStatus::NORMAL_RUNNING;
+        data.voltStatus = VoltageStatus::VOLT_NORMAL_RUNNING;
     } else {
-        data.voltStatus = VoltageStatus::OVERCHARGE;
+        data.voltStatus = VoltageStatus::VOLT_OVERCHARGE;
     }
 }
 

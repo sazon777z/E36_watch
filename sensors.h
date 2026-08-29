@@ -5,11 +5,11 @@
 #include "config.h"
 
 enum class VoltageStatus {
-    CRITICAL_LOW,   // < 11.5V (Сильный разряд АКБ)
-    LOW,            // 11.5V - 12.2V (Низкий заряд)
-    NORMAL_REST,    // 12.2V - 12.8V (Заглушен, норма)
-    NORMAL_RUNNING, // 13.5V - 14.6V (Запущен, идет заряд генератора)
-    OVERCHARGE      // > 14.8V (Перезаряд / неисправность реле-регулятора)
+    VOLT_CRITICAL_LOW,   // < 11.5V (Сильный разряд АКБ)
+    VOLT_LOW,            // 11.5V - 12.2V (Низкий заряд)
+    VOLT_NORMAL_REST,    // 12.2V - 12.8V (Заглушен, норма)
+    VOLT_NORMAL_RUNNING, // 13.5V - 14.6V (Запущен, идет заряд генератора)
+    VOLT_OVERCHARGE      // > 14.8V (Перезаряд / неисправность реле-регулятора)
 };
 
 struct SensorData {
