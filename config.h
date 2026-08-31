@@ -7,18 +7,18 @@
 // НАЗНАЧЕНИЕ ПИНОВ (PINOUT) ESP32-S3
 // =============================================================================
 // Дисплей GMT024-08 (ST7789 SPI TFT 240x320)
-#define PIN_TFT_SCL       1   // SPI Clock (SCK)
-#define PIN_TFT_SDA       2   // SPI Data / MOSI
-#define PIN_TFT_RST       3   // Reset
-#define PIN_TFT_DC        4   // Data / Command
-#define PIN_TFT_CS        5   // Chip Select
-#define PIN_TFT_BL        6   // Подсветка (ШИМ / LEDC)
+#define PIN_TFT_SCL       13  // SPI Clock (SCK)
+#define PIN_TFT_SDA       12  // SPI Data / MOSI
+#define PIN_TFT_RST       11  // Reset
+#define PIN_TFT_DC        10  // Data / Command
+#define PIN_TFT_CS        9   // Chip Select
+#define PIN_TFT_BL        8   // Подсветка (ШИМ / LEDC)
 
 // Дополнительные входы/выходы (при необходимости)
 #define PIN_VOLTAGE_ADC   7   // АЦП для измерения напряжения АКБ (через делитель)
-#define PIN_BTN_NEXT      8   // Кнопка переключения экранов (с подтяжкой к VCC/GND)
-#define PIN_ONEWIRE_TEMP  9   // Шина 1-Wire для датчика температуры DS18B20
-#define PIN_ILLUMINATION  10  // Вход сигнала габаритов/фар (для авто-диммирования)
+#define PIN_BTN_NEXT      14  // Кнопка переключения экранов (с подтяжкой к VCC/GND)
+#define PIN_ONEWIRE_TEMP  15  // Шина 1-Wire для датчика температуры DS18B20
+#define PIN_ILLUMINATION  16  // Вход сигнала габаритов/фар (для авто-диммирования)
 
 // =============================================================================
 // НАСТРОЙКИ ДИСПЛЕЯ
