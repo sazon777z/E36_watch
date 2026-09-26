@@ -157,7 +157,7 @@ void UiEngine::createScreenClock() {
     lv_obj_set_style_text_font(lbl_boost_val, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_boost_val, COLOR_LV_WHITE, 0);
     lv_obj_set_pos(lbl_boost_val, 16, 172);
-    lv_label_set_text(lbl_boost_val, "+0.00b");
+    lv_label_set_text(lbl_boost_val, "0.00b");
 
     // Колонка 2: COOLANT
     lv_obj_t* t_clt = lv_label_create(scr_clock);
@@ -170,7 +170,7 @@ void UiEngine::createScreenClock() {
     lv_obj_set_style_text_font(lbl_clt_val, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_clt_val, COLOR_LV_WHITE, 0);
     lv_obj_set_pos(lbl_clt_val, 120, 172);
-    lv_label_set_text(lbl_clt_val, "+20C");
+    lv_label_set_text(lbl_clt_val, "20C");
 
     // Колонка 3: AFR
     lv_obj_t* t_afr = lv_label_create(scr_clock);
@@ -623,7 +623,11 @@ void UiEngine::updateClockScreen() {
     }
 
     // Температура ОЖ (COOLANT)
-    lv_label_set_text_fmt(lbl_clt_val, "%+.0fC", sens.tempOutdoor);
+    if (sens.ms2Online) {
+        lv_label_set_text_fmt(lbl_clt_val, "%dC", (int)round(sens.ms2.clt_c));
+    } else {
+        lv_label_set_text_fmt(lbl_clt_val, "%dC", (int)round(sens.tempOutdoor));
+    }
 
     // Смесь (AFR)
     if (sens.ms2Online) {
