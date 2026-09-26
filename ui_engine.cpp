@@ -23,7 +23,9 @@ UiEngine::UiEngine()
       lastColonBlinkMillis(0),
       stopwatchRunning(false),
       stopwatchStartMillis(0),
-      stopwatchElapsedMillis(0) {
+      stopwatchElapsedMillis(0),
+      lastGpsSats(-1),
+      lastGpsFix(false) {
 }
 
 void UiEngine::init() {
@@ -74,6 +76,37 @@ void UiEngine::showBootSplash(const char* subtitle) {
     tft.fillScreen(COLOR_BLACK);
     setScreen(ScreenId::CLASSIC_CLOCK);
     Display.fadeIn(DEFAULT_BRIGHTNESS, 3);
+}
+
+void UiEngine::drawGpsCornerIndicator(bool forceRedraw) {
+    const GpsData& gps = Gps.getData();
+    if (!forceRedraw && gps.satellites == lastGpsSats && gps.hasFix == lastGpsFix) {
+        return; // Без изменений - исключаем мерцание
+    }
+
+    lastGpsSats = gps.satellites;
+    lastGpsFix = gps.hasFix;
+
+    Adafruit_ST7789& tft = Display.getTft();
+
+    // Очистка зоны правого верхнего угла (X: 256..318, Y: 6..32)
+    tft.fillRect(256, 6, 62, 26, COLOR_BLACK);
+
+    uint16_t col = gps.hasFix ? COLOR_WHITE : COLOR_MID_GRAY;
+
+    // Укрупненная иконка спутника (16x16 px)
+    BmwAssets::drawLargeSatellite(tft, 258, 10, col, gps.hasFix);
+
+    // Крупное количество спутников (FreeSansBoldOblique12pt7b)
+    tft.setFont(&FreeSansBoldOblique12pt7b);
+    tft.setTextColor(col);
+    tft.setCursor(282, 25);
+    if (gps.hasFix || gps.satellites > 0) {
+        tft.printf("%d", gps.satellites);
+    } else {
+        tft.print("--");
+    }
+    tft.setFont(); // Сброс шрифта
 }
 
 void UiEngine::drawHeader(const char* title, bool showStatusIcons) {
@@ -173,6 +206,9 @@ void UiEngine::drawClassicClockScreen(bool fullRedraw) {
     }
 
     tft.setFont(); // Сброс шрифта
+
+    // Крупный индикатор спутников в правом верхнем углу
+    drawGpsCornerIndicator(fullRedraw);
 }
 
 // -----------------------------------------------------------------------------
@@ -232,17 +268,24 @@ void UiEngine::drawObcTripFuelScreen(bool fullRedraw) {
         tft.fillRect(130, 50, 42, 20, COLOR_BLACK);
     }
 
-    // 2. МГНОВЕННЫЙ РАСХОД (справа от спидометра)
-    tft.fillRect(174, 14, 142, 68, COLOR_BLACK);
-    tft.setCursor(176, 32);
+    // 2. МГНОВЕННЫЙ РАСХОД (справа от спидометра, X = 170..252)
+    tft.fillRect(170, 14, 84, 68, COLOR_BLACK);
+    tft.setCursor(172, 32);
     tft.setTextColor(COLOR_SILVER);
     tft.setFont(&FreeSansBoldOblique9pt7b);
-    tft.print(trip.isLitersPerHour ? "INSTANT (L/H):" : "INSTANT (L/100):");
+    tft.print(trip.isLitersPerHour ? "INST. L/H:" : "INSTANT:");
 
     tft.setFont(&FreeSansBoldOblique18pt7b);
     tft.setTextColor(COLOR_WHITE);
-    tft.setCursor(176, 70);
+    tft.setCursor(172, 70);
     tft.printf("%.1f", trip.instant_consumption);
+
+    if (!trip.isLitersPerHour) {
+        tft.setFont(&FreeSansBoldOblique9pt7b);
+        tft.setTextColor(COLOR_SILVER);
+        tft.setCursor(224, 70);
+        tft.print("L");
+    }
 
     // 3. КВАДРАНТ 1: Суточный пробег (Trip Distance) - крупным 18pt
     tft.fillRect(16, 114, 138, 38, COLOR_BLACK);
@@ -271,6 +314,9 @@ void UiEngine::drawObcTripFuelScreen(bool fullRedraw) {
     tft.printf("%.1f L", trip.trip_fuel_liters);
 
     tft.setFont(); // Сброс шрифта
+
+    // Крупный индикатор спутников в правом верхнем углу
+    drawGpsCornerIndicator(fullRedraw);
 }
 
 // -----------------------------------------------------------------------------
@@ -292,7 +338,7 @@ void UiEngine::drawObcTelemetryScreen(bool fullRedraw) {
         tft.setFont(&FreeSansBoldOblique9pt7b);
         tft.setTextColor(COLOR_SILVER);
         tft.setCursor(15, 24);  tft.print("BATTERY");
-        tft.setCursor(168, 24); tft.print("COOLANT (CLT)");
+        tft.setCursor(168, 24); tft.print("COOLANT");
         tft.setCursor(15, 104); tft.print("AIR / FUEL (AFR)");
         tft.setCursor(168, 104);tft.print("THROTTLE (TPS)");
     }
@@ -317,7 +363,7 @@ void UiEngine::drawObcTelemetryScreen(bool fullRedraw) {
     }
 
     // 2. ТЕМПЕРАТУРА ОЖ ДВС (Верх-право)
-    tft.fillRect(168, 30, 140, 50, COLOR_BLACK);
+    tft.fillRect(168, 30, 86, 50, COLOR_BLACK);
     tft.setFont(&FreeSansBoldOblique18pt7b);
     tft.setTextColor(COLOR_WHITE);
     tft.setCursor(168, 56);
@@ -394,6 +440,9 @@ void UiEngine::drawObcTelemetryScreen(bool fullRedraw) {
         tft.fillRect(20, 200, boostW, 16, COLOR_WHITE);
     }
     tft.setFont();
+
+    // Крупный индикатор спутников в правом верхнем углу
+    drawGpsCornerIndicator(fullRedraw);
 }
 
 // -----------------------------------------------------------------------------
@@ -495,6 +544,9 @@ void UiEngine::drawMPerformanceScreen(bool fullRedraw) {
         tft.print(stopwatchRunning ? ">> TIMING..." : "[ READY ]");
         tft.setFont();
     }
+
+    // Крупный индикатор спутников в правом верхнем углу
+    drawGpsCornerIndicator(fullRedraw);
 }
 
 void UiEngine::toggleStopwatch() {

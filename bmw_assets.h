@@ -160,6 +160,26 @@ public:
         }
     }
 
+    // Укрупненная и четкая иконка спутника GPS для угла экрана (16x16 px)
+    static void drawLargeSatellite(Adafruit_ST7789& tft, int16_t x, int16_t y, uint16_t color, bool hasFix) {
+        uint16_t c = hasFix ? color : COLOR_MID_GRAY;
+        // Корпус спутника (радиус 4)
+        tft.drawCircle(x + 7, y + 7, 4, c);
+        if (hasFix) {
+            tft.fillCircle(x + 7, y + 7, 2, c);
+        }
+        // Солнечные панели (крылья) двойной толщины
+        tft.fillRect(x + 1, y + 4, 3, 7, c);
+        tft.fillRect(x + 11, y + 4, 3, 7, c);
+        tft.drawFastHLine(x + 4, y + 7, 2, c);
+        tft.drawFastHLine(x + 9, y + 7, 2, c);
+        // Дуги радиосигнала
+        if (hasFix) {
+            tft.drawCircleHelper(x + 7, y + 7, 7, 4 | 8, c);
+            tft.drawCircleHelper(x + 7, y + 7, 9, 4 | 8, c);
+        }
+    }
+
     // Аутентичный 7-сегментный индикатор BMW OBC (с теневыми неактивными сегментами)
     // Поддерживает цифры '0'-'9', ':', '-', ' '
     static void draw7SegmentDigit(Adafruit_ST7789& tft, int16_t x, int16_t y, char ch, 

@@ -66,8 +66,13 @@ private:
     void drawSettingsInfoScreen(bool fullRedraw);
 
     // Вспомогательные элементы
+    void drawGpsCornerIndicator(bool forceRedraw = false);
     void drawHeader(const char* title, bool showStatusIcons = true);
     void drawFooter(const char* leftText, const char* rightText);
+
+    // Кеш спутников GPS
+    int lastGpsSats;
+    bool lastGpsFix;
 };
 
 extern UiEngine UI;
