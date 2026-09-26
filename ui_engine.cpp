@@ -5,6 +5,7 @@
 #include <Fonts/FreeSansBoldOblique9pt7b.h>
 #include <Fonts/FreeSansBoldOblique12pt7b.h>
 #include <Fonts/FreeSansBoldOblique18pt7b.h>
+#include "bmw_clock_font.h"
 
 UiEngine UI;
 
@@ -178,26 +179,26 @@ void UiEngine::drawClassicClockScreen(bool fullRedraw) {
         lastColonBlinkMillis = millis();
     }
 
-    // Отрисовка ЧАСОВ крупным курсивным шрифтом FreeSansBoldOblique (не 7-сегментный, без секунд)
+    // Отрисовка ЧАСОВ нативным высокодетализированным шрифтом BmwClockFont (1:1, без ступеней и обрубленности)
     if (fullRedraw || td.hour != lastHour) {
         lastHour = td.hour;
         char hBuf[4];
         snprintf(hBuf, sizeof(hBuf), "%02d", td.hour);
-        tft.fillRect(70, 44, 78, 56, COLOR_BLACK);
-        tft.setFont(&FreeSansBoldOblique18pt7b);
-        tft.setTextSize(2);
+        tft.fillRect(68, 44, 80, 56, COLOR_BLACK);
+        tft.setFont(&BmwClockFont);
+        tft.setTextSize(1);
         tft.setTextColor(COLOR_WHITE);
-        tft.setCursor(72, 96);
+        tft.setCursor(70, 96);
         tft.print(hBuf);
     }
 
     // Двоеточие между часами и минутами (мигание)
     if (fullRedraw || colonState != lastColonState) {
         lastColonState = colonState;
-        tft.fillRect(148, 44, 24, 56, COLOR_BLACK);
+        tft.fillRect(148, 44, 23, 56, COLOR_BLACK);
         if (colonState) {
-            tft.setFont(&FreeSansBoldOblique18pt7b);
-            tft.setTextSize(2);
+            tft.setFont(&BmwClockFont);
+            tft.setTextSize(1);
             tft.setTextColor(COLOR_WHITE);
             tft.setCursor(148, 96);
             tft.print(":");
@@ -209,15 +210,13 @@ void UiEngine::drawClassicClockScreen(bool fullRedraw) {
         lastMinute = td.minute;
         char mBuf[4];
         snprintf(mBuf, sizeof(mBuf), "%02d", td.minute);
-        tft.fillRect(172, 44, 78, 56, COLOR_BLACK);
-        tft.setFont(&FreeSansBoldOblique18pt7b);
-        tft.setTextSize(2);
+        tft.fillRect(170, 44, 80, 56, COLOR_BLACK);
+        tft.setFont(&BmwClockFont);
+        tft.setTextSize(1);
         tft.setTextColor(COLOR_WHITE);
-        tft.setCursor(172, 96);
+        tft.setCursor(171, 96);
         tft.print(mBuf);
     }
-
-    tft.setTextSize(1); // Возврат стандартного масштаба шрифта
 
     // Обновление нижних значений телеметрии (ТОЛЬКО ПРИ ИЗМЕНЕНИИ СТРОКИ ДЛЯ ИСКЛЮЧЕНИЯ МЕРЦАНИЯ)
     tft.setFont(&FreeSansBoldOblique18pt7b);
