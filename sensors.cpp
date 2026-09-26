@@ -30,35 +30,41 @@ void SensorsManager::init() {
 }
 
 void SensorsManager::update() {
+    // Получаем свежие данные CAN-шины
+    data.ms2Online = CanBus.isConnected();
+    if (data.ms2Online) {
+        data.ms2 = CanBus.getTelemetry();
+    }
+
     updateBatteryVoltage();
     updateIllumination();
     updateTemperatures();
 }
 
 void SensorsManager::updateBatteryVoltage() {
-    int raw = analogRead(PIN_VOLTAGE_ADC);
-    
-    // Экспоненциальное скользящее среднее (EMA) для устранения шума АЦП
-    filteredAdcRaw = (filteredAdcRaw * 0.85f) + (raw * 0.15f);
+    if (data.ms2Online && data.ms2.batt_volt > 5.0f) {
+        // Данные напряжения поступают напрямую из ЭБУ MegaSquirt 2 с высокой точностью
+        data.batteryVoltage = data.ms2.batt_volt;
+    } else {
+        // Резервное чтение через встроенный АЦП ESP32-S3 (если CAN не подключен)
+        int raw = analogRead(PIN_VOLTAGE_ADC);
+        filteredAdcRaw = (filteredAdcRaw * 0.85f) + (raw * 0.15f);
+        float pinVoltage = (filteredAdcRaw / ADC_RESOLUTION) * ADC_VREF;
+        float calculatedVolt = pinVoltage * VOLTAGE_DIVIDER_RATIO;
 
-    float pinVoltage = (filteredAdcRaw / ADC_RESOLUTION) * ADC_VREF;
-    float calculatedVolt = pinVoltage * VOLTAGE_DIVIDER_RATIO;
-
-    // Если делитель не подключен (пинг висит в воздухе или 0), эмулируем адекватный вольтаж для тестов
-    if (calculatedVolt < 1.0f) {
-        // Тестовое значение бортсети BMW E36 при стендовых испытаниях
-        calculatedVolt = 13.8f;
+        if (calculatedVolt < 1.0f) {
+            calculatedVolt = 13.8f; // Тестовое значение бортсети при стендовых испытаниях
+        }
+        data.batteryVoltage = calculatedVolt;
     }
 
-    data.batteryVoltage = calculatedVolt;
-
     // Отслеживание экстремумов
-    if (calculatedVolt > 5.0f) { // исключаем нули при отключении
-        if (calculatedVolt < data.minCrankVoltage) {
-            data.minCrankVoltage = calculatedVolt;
+    if (data.batteryVoltage > 5.0f) {
+        if (data.batteryVoltage < data.minCrankVoltage) {
+            data.minCrankVoltage = data.batteryVoltage;
         }
-        if (calculatedVolt > data.maxVoltage) {
-            data.maxVoltage = calculatedVolt;
+        if (data.batteryVoltage > data.maxVoltage) {
+            data.maxVoltage = data.batteryVoltage;
         }
     }
 

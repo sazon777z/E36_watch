@@ -12,6 +12,12 @@
  *   CS         -> GPIO 9
  *   BL         -> GPIO 8 (ШИМ регулировка яркости)
  * 
+ * CAN-ШИНА MEGASQUIRT 2 (WCMCU-230 / SN65HVD230):
+ *   CTX (CAN TX) -> GPIO 43 (вывод TX платы ESP32-S3)
+ *   CRX (CAN RX) -> GPIO 44 (вывод RX платы ESP32-S3)
+ *   3V3          -> 3.3V (питание)
+ *   GND          -> GND (земля)
+ * 
  * ОПЦИОНАЛЬНЫЕ ВХОДЫ:
  *   ADC АКБ 12V -> GPIO 7 (через делитель напряжения)
  *   КНОПКА      -> GPIO 14 (кнопка переключения экранов)
@@ -23,6 +29,7 @@
 #include "config.h"
 #include "bmw_theme.h"
 #include "display_driver.h"
+#include "can_driver.h"
 #include "time_keeper.h"
 #include "sensors.h"
 #include "ui_engine.h"
@@ -45,10 +52,17 @@ void setup() {
         Serial.println("[OK] Дисплей ST7789 успешно инициализирован.");
     }
 
-    // 2. Отображение фирменной заставки BMW
+    // 2. Инициализация аппаратного контроллера CAN (TWAI) для MegaSquirt 2
+    if (!CanBus.init()) {
+        Serial.println("[WARN] CAN-шина не запущена, проверьте подключение WCMCU-230.");
+    } else {
+        Serial.println("[OK] CAN-шина MegaSquirt 2 (500 kbps) запущена.");
+    }
+
+    // 3. Отображение фирменной заставки BMW
     UI.showBootSplash("ON-BOARD COMPUTER");
 
-    // 3. Инициализация часов, АЦП сенсоров и веб-портала
+    // 4. Инициализация часов, сенсоров и веб-портала
     Time.init();
     Sensors.init();
     UI.init();
@@ -59,12 +73,15 @@ void setup() {
 }
 
 void loop() {
+    // 1. Постоянный неблокирующий прием пакетов CAN-шины MegaSquirt 2
+    CanBus.update();
+
     unsigned long currentMillis = millis();
 
-    // 1. Обслуживание веб-сервера настроек со смартфона
+    // 2. Обслуживание веб-сервера настроек со смартфона
     Portal.update();
 
-    // 2. Периодический опрос датчиков и АЦП бортсети (каждые 100 мс)
+    // 3. Периодический опрос датчиков и АЦП бортсети (каждые 100 мс)
     if (currentMillis - lastSensorUpdate >= 100) {
         lastSensorUpdate = currentMillis;
         Sensors.update();

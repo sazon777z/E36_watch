@@ -92,9 +92,20 @@ void UiEngine::drawHeader(const char* title, bool showStatusIcons) {
         tft.setCursor(35, 8);
         tft.printf("%.1fV", sens.batteryVoltage);
 
-        // Температура за бортом
-        BmwAssets::drawThermometer(tft, 225, 5, COLOR_BMW_AMBER_MAIN);
-        tft.setCursor(240, 8);
+        // Индикатор связи с ЭБУ MegaSquirt 2
+        tft.setCursor(80, 8);
+        if (sens.ms2Online) {
+            tft.setTextColor(COLOR_STATUS_OK);
+            tft.print("MS2:OK");
+        } else {
+            tft.setTextColor(COLOR_MID_GRAY);
+            tft.print("MS2:OFF");
+        }
+
+        // Температура ОЖ мотора (CLT) из MS2 или датчика
+        BmwAssets::drawThermometer(tft, 218, 5, COLOR_BMW_AMBER_MAIN);
+        tft.setTextColor(COLOR_BMW_AMBER_BRIGHT);
+        tft.setCursor(232, 8);
         tft.printf("%+.0fC", sens.tempOutdoor);
 
         // Статус Wi-Fi
@@ -237,23 +248,23 @@ void UiEngine::drawObcTelemetryScreen(bool fullRedraw) {
         tft.setCursor(20, 40);
         tft.print("НАПРЯЖЕНИЕ АКБ");
 
-        // Блок 2: Время поездки / Uptime (справа)
+        // Блок 2: Данные двигателя MS2 / Uptime (справа)
         tft.drawRoundRect(165, 32, 145, 112, 4, COLOR_DARK_GRAY);
         tft.setTextColor(COLOR_MID_GRAY);
         tft.setTextSize(1);
         tft.setCursor(175, 40);
-        tft.print("ВРЕМЯ ПОЕЗДКИ");
+        tft.print(sens.ms2Online ? "ДВИГАТЕЛЬ (MS2)" : "ВРЕМЯ ПОЕЗДКИ");
 
-        // Блок 3: Шкала вольтметра снизу
+        // Блок 3: Шкала давления MAP / Вольтметр снизу
         tft.drawRoundRect(10, 152, 300, 60, 4, COLOR_DARK_GRAY);
         tft.setTextColor(COLOR_MID_GRAY);
         tft.setCursor(18, 160);
-        tft.print("МОНИТОР ЗАРЯДА ГЕНЕРАТОРА");
+        tft.print(sens.ms2Online ? "ДАВЛЕНИЕ ВПУСКА / НАДДУВ (MAP)" : "МОНИТОР ЗАРЯДА ГЕНЕРАТОРА");
 
-        drawFooter("КНОПКА: СЛЕД. ЭКРАН", "E36 OBC");
+        drawFooter("КНОПКА: СЛЕД. ЭКРАН", sens.ms2Online ? "MS2 500K CAN" : "E36 OBC");
     }
 
-    // Обновление вольтметра
+    // 1. Обновление вольтметра
     tft.fillRect(16, 56, 133, 40, COLOR_BLACK);
     uint16_t vCol = COLOR_BMW_AMBER_BRIGHT;
     if (sens.voltStatus == VoltageStatus::VOLT_CRITICAL_LOW || sens.voltStatus == VoltageStatus::VOLT_OVERCHARGE) {
@@ -301,57 +312,100 @@ void UiEngine::drawObcTelemetryScreen(bool fullRedraw) {
     tft.setCursor(18, 122);
     tft.printf("Пуск: %.1fV", sens.minCrankVoltage);
 
-    // Обновление времени в пути
-    int uH = uptime / 3600;
-    int uM = (uptime % 3600) / 60;
-    int uS = uptime % 60;
+    // 2. Обновление правого блока (MS2 данные или Uptime)
+    tft.fillRect(172, 54, 132, 84, COLOR_BLACK);
+    if (sens.ms2Online) {
+        tft.setTextSize(1);
+        tft.setTextColor(COLOR_BMW_AMBER_BRIGHT);
+        tft.setCursor(174, 56);
+        tft.printf("ОЖ (CLT):  %+.0f C", sens.ms2.clt_c);
 
-    tft.fillRect(172, 56, 132, 38, COLOR_BLACK);
-    tft.setTextColor(COLOR_BMW_AMBER_BRIGHT);
-    tft.setTextSize(2);
-    tft.setCursor(176, 64);
-    tft.printf("%02d:%02d:%02d", uH, uM, uS);
+        tft.setTextColor(COLOR_BMW_AMBER_MAIN);
+        tft.setCursor(174, 74);
+        tft.printf("Впуск (IAT): %+.0f C", sens.ms2.mat_c);
 
-    tft.fillRect(172, 102, 132, 36, COLOR_BLACK);
-    tft.setTextColor(COLOR_BMW_AMBER_MAIN);
-    tft.setTextSize(1);
-    tft.setCursor(175, 104);
-    tft.printf("Салон: %+.1f C", sens.tempCabin);
-    tft.setCursor(175, 122);
-    tft.printf("Улица: %+.1f C", sens.tempOutdoor);
+        tft.setCursor(174, 92);
+        tft.printf("Дроссель:   %.0f %%", sens.ms2.tps_pct);
 
-    // Графический индикатор напряжения (полоса 10.0V - 15.5V)
-    float vClamped = constrain(sens.batteryVoltage, 10.0f, 15.5f);
-    int barW = (int)((vClamped - 10.0f) / 5.5f * 260.0f);
-    
+        tft.setTextColor(COLOR_WHITE);
+        tft.setCursor(174, 110);
+        tft.printf("Смесь AFR:  %.1f", sens.ms2.afr);
+    } else {
+        int uH = uptime / 3600;
+        int uM = (uptime % 3600) / 60;
+        int uS = uptime % 60;
+
+        tft.setTextColor(COLOR_BMW_AMBER_BRIGHT);
+        tft.setTextSize(2);
+        tft.setCursor(176, 64);
+        tft.printf("%02d:%02d:%02d", uH, uM, uS);
+
+        tft.setTextColor(COLOR_BMW_AMBER_MAIN);
+        tft.setTextSize(1);
+        tft.setCursor(175, 104);
+        tft.printf("Салон: %+.1f C", sens.tempCabin);
+        tft.setCursor(175, 122);
+        tft.printf("Улица: %+.1f C", sens.tempOutdoor);
+    }
+
+    // 3. Нижний графический индикатор (MAP наддув или шкала АКБ)
     tft.fillRect(20, 178, 260, 14, COLOR_BLACK);
     tft.drawRect(19, 177, 262, 16, COLOR_DARK_GRAY);
 
-    // Цвет полосы в зависимости от зоны
-    uint16_t barColor = (sens.batteryVoltage < 11.8f) ? COLOR_STATUS_ERR :
-                        (sens.batteryVoltage < 13.2f) ? COLOR_BMW_AMBER_MAIN :
-                        (sens.batteryVoltage <= 14.7f) ? COLOR_STATUS_OK : COLOR_STATUS_WARN;
-    
-    tft.fillRect(20, 178, barW, 14, barColor);
+    if (sens.ms2Online) {
+        // Шкала давления во впуске (от 20 кПа / -0.80 бар до 250 кПа / +1.50 бар)
+        float mapClamped = constrain(sens.ms2.map_kpa, 20.0f, 250.0f);
+        int barW = (int)((mapClamped - 20.0f) / 230.0f * 260.0f);
 
-    // Метки шкалы
-    tft.setTextColor(COLOR_MID_GRAY);
-    tft.setTextSize(1);
-    tft.setCursor(18, 197);
-    tft.print("10V");
-    tft.setCursor(110, 197);
-    tft.print("12.6V");
-    tft.setCursor(195, 197);
-    tft.print("14.4V");
-    tft.setCursor(265, 197);
-    tft.print("15.5V");
+        uint16_t barColor = (sens.ms2.boost_bar > 0.05f) ? COLOR_BMW_M_RED :
+                            (sens.ms2.boost_bar > -0.2f) ? COLOR_BMW_AMBER_BRIGHT : COLOR_BMW_M_BLUE;
+        tft.fillRect(20, 178, barW, 14, barColor);
+
+        // Метки давления
+        tft.fillRect(18, 196, 280, 12, COLOR_BLACK);
+        tft.setTextColor(COLOR_MID_GRAY);
+        tft.setTextSize(1);
+        tft.setCursor(18, 197);
+        tft.print("-0.8b");
+        tft.setCursor(105, 197);
+        tft.print("0.0b (100k)");
+        tft.setCursor(195, 197);
+        tft.print("+0.8b");
+        tft.setCursor(255, 197);
+        tft.print("+1.5b");
+
+        // Текущее значение наддува цифрами
+        tft.fillRect(180, 158, 125, 14, COLOR_BLACK);
+        tft.setTextColor(COLOR_BMW_AMBER_BRIGHT);
+        tft.setCursor(185, 160);
+        tft.printf("%+.2f Bar (%.0f kPa)", sens.ms2.boost_bar, sens.ms2.map_kpa);
+    } else {
+        float vClamped = constrain(sens.batteryVoltage, 10.0f, 15.5f);
+        int barW = (int)((vClamped - 10.0f) / 5.5f * 260.0f);
+        uint16_t barColor = (sens.batteryVoltage < 11.8f) ? COLOR_STATUS_ERR :
+                            (sens.batteryVoltage < 13.2f) ? COLOR_BMW_AMBER_MAIN :
+                            (sens.batteryVoltage <= 14.7f) ? COLOR_STATUS_OK : COLOR_STATUS_WARN;
+        tft.fillRect(20, 178, barW, 14, barColor);
+
+        tft.setTextColor(COLOR_MID_GRAY);
+        tft.setTextSize(1);
+        tft.setCursor(18, 197);
+        tft.print("10V");
+        tft.setCursor(110, 197);
+        tft.print("12.6V");
+        tft.setCursor(195, 197);
+        tft.print("14.4V");
+        tft.setCursor(265, 197);
+        tft.print("15.5V");
+    }
 }
 
 // -----------------------------------------------------------------------------
-// ЭКРАН 3: СПОРТИВНЫЙ ЭКРАН ///M PERFORMANCE & СЕКУНДОМЕР
+// ЭКРАН 3: СПОРТИВНЫЙ ЭКРАН ///M PERFORMANCE & ТАХОМЕТР
 // -----------------------------------------------------------------------------
 void UiEngine::drawMPerformanceScreen(bool fullRedraw) {
     Adafruit_ST7789& tft = Display.getTft();
+    const SensorData& sens = Sensors.getData();
 
     if (fullRedraw) {
         tft.fillScreen(COLOR_BLACK);
@@ -362,55 +416,104 @@ void UiEngine::drawMPerformanceScreen(bool fullRedraw) {
         tft.setTextColor(COLOR_WHITE);
         tft.setTextSize(2);
         tft.setCursor(78, 8);
-        tft.print("PERFORMANCE");
+        tft.print("M-PERFORMANCE");
 
         tft.drawFastHLine(0, 30, SCREEN_WIDTH, COLOR_BMW_M_BLUE);
 
-        // Рамка таймера / секундомера
-        tft.drawRoundRect(15, 42, 290, 120, 5, COLOR_DARK_GRAY);
+        // Рамка тахометра / секундомера
+        tft.drawRoundRect(10, 38, 300, 130, 5, COLOR_DARK_GRAY);
+
+        drawFooter("КЛИК: СТАРТ/СТОП", sens.ms2Online ? "MS2 LIVE RPM" : "СЕКУНДОМЕР");
+    }
+
+    if (sens.ms2Online) {
+        // ОТОБРАЖЕНИЕ ОБОРОТОВ ДВИГАТЕЛЯ ИЗ MEGASQUIRT 2
         tft.setTextColor(COLOR_BMW_M_CYAN);
         tft.setTextSize(1);
-        tft.setCursor(28, 52);
-        tft.print("/// СЕКУНДОМЕР / ЗАМЕР 0-100");
+        tft.setCursor(20, 48);
+        tft.print("/// ТАХОМЕТР И НАДДУВ MS2");
 
-        drawFooter("КЛИК: СТАРТ/СТОП", "УДЕРЖАНИЕ: СБРОС");
-    }
+        // Большие цифры оборотов
+        tft.fillRect(20, 64, 280, 46, COLOR_BLACK);
+        uint16_t rpmCol = (sens.ms2.rpm > 6500) ? COLOR_BMW_M_RED :
+                          (sens.ms2.rpm > 5500) ? COLOR_BMW_AMBER_BRIGHT : COLOR_WHITE;
+        tft.setTextColor(rpmCol);
+        tft.setTextSize(4);
+        tft.setCursor(25, 70);
+        tft.printf("%4d", sens.ms2.rpm);
+        tft.setTextSize(2);
+        tft.setCursor(145, 84);
+        tft.print("RPM");
 
-    // Расчет текущего времени секундомера
-    unsigned long currentElapsed = stopwatchElapsedMillis;
-    if (stopwatchRunning) {
-        currentElapsed += (millis() - stopwatchStartMillis);
-    }
+        // Наддув и УОЗ справа
+        tft.setTextSize(1);
+        tft.setTextColor(COLOR_BMW_AMBER_MAIN);
+        tft.setCursor(200, 72);
+        tft.printf("Бар: %+.2f", sens.ms2.boost_bar);
+        tft.setCursor(200, 88);
+        tft.printf("УОЗ: %.1f", sens.ms2.advance_deg);
 
-    unsigned long totalSec = currentElapsed / 1000;
-    unsigned long msFraction = (currentElapsed % 1000) / 100; // Десятые доли
-    int m = totalSec / 60;
-    int s = totalSec % 60;
+        // Динамический Shift-Light / Шкала оборотов (0 - 7500 RPM)
+        int rpmW = map(constrain((int)sens.ms2.rpm, 0, 7500), 0, 7500, 0, 276);
+        tft.fillRect(22, 122, 276, 16, COLOR_BLACK);
+        tft.drawRect(21, 121, 278, 18, COLOR_DARK_GRAY);
 
-    // Крупный таймер
-    tft.fillRect(25, 75, 270, 50, COLOR_BLACK);
-    tft.setTextColor(stopwatchRunning ? COLOR_BMW_AMBER_BRIGHT : COLOR_WHITE);
-    tft.setTextSize(4);
-    tft.setCursor(35, 82);
-    tft.printf("%02d:%02d.%1d", m, s, (int)msFraction);
+        // Трехцветная заливка шкалы в стиле M-Power
+        if (rpmW > 0) {
+            uint16_t barCol = (sens.ms2.rpm < 4000) ? COLOR_BMW_M_CYAN :
+                              (sens.ms2.rpm < 6000) ? COLOR_BMW_M_BLUE : COLOR_BMW_M_RED;
+            tft.fillRect(22, 122, rpmW, 16, barCol);
+        }
 
-    // Статус секундомера
-    tft.fillRect(28, 138, 250, 18, COLOR_BLACK);
-    tft.setTextSize(1);
-    if (stopwatchRunning) {
-        tft.setTextColor(COLOR_STATUS_OK);
-        tft.setCursor(28, 140);
-        tft.print(">> ЗАМЕР ИДЕТ...");
-    } else {
+        // Метки шкалы
+        tft.fillRect(20, 144, 280, 14, COLOR_BLACK);
         tft.setTextColor(COLOR_MID_GRAY);
+        tft.setTextSize(1);
+        tft.setCursor(20, 146);
+        tft.print("0");
+        tft.setCursor(85, 146);
+        tft.print("2k");
+        tft.setCursor(150, 146);
+        tft.print("4k");
+        tft.setCursor(215, 146);
+        tft.print("6k");
+        tft.setTextColor(COLOR_BMW_M_RED);
+        tft.setCursor(275, 146);
+        tft.print("7.5k");
+
+    } else {
+        // Резервный секундомер (если MS2 отключен)
+        tft.setTextColor(COLOR_BMW_M_CYAN);
+        tft.setTextSize(1);
+        tft.setCursor(20, 48);
+        tft.print("/// СЕКУНДОМЕР / ЗАМЕР 0-100 (MS2 OFFLINE)");
+
+        unsigned long currentElapsed = stopwatchElapsedMillis;
+        if (stopwatchRunning) {
+            currentElapsed += (millis() - stopwatchStartMillis);
+        }
+        unsigned long totalSec = currentElapsed / 1000;
+        unsigned long msFraction = (currentElapsed % 1000) / 100;
+        int m = totalSec / 60;
+        int s = totalSec % 60;
+
+        tft.fillRect(25, 75, 270, 50, COLOR_BLACK);
+        tft.setTextColor(stopwatchRunning ? COLOR_BMW_AMBER_BRIGHT : COLOR_WHITE);
+        tft.setTextSize(4);
+        tft.setCursor(35, 82);
+        tft.printf("%02d:%02d.%1d", m, s, (int)msFraction);
+
+        tft.fillRect(28, 138, 250, 18, COLOR_BLACK);
+        tft.setTextSize(1);
+        tft.setTextColor(stopwatchRunning ? COLOR_STATUS_OK : COLOR_MID_GRAY);
         tft.setCursor(28, 140);
-        tft.print("[ ГОТОВ К ЗАМЕРУ ]");
+        tft.print(stopwatchRunning ? ">> ЗАМЕР ИДЕТ..." : "[ ГОТОВ К ЗАМЕРУ ]");
     }
 
-    // Декоративная динамическая шкала
+    // Декоративная динамическая полоса внизу экрана
     int barLen = (int)((millis() / 50) % 290);
-    tft.fillRect(15, 175, 290, 8, COLOR_BLACK);
-    tft.fillRect(15, 175, barLen, 8, COLOR_BMW_M_RED);
+    tft.fillRect(15, 185, 290, 6, COLOR_BLACK);
+    tft.fillRect(15, 185, barLen, 6, COLOR_BMW_M_RED);
 }
 
 void UiEngine::toggleStopwatch() {
@@ -435,45 +538,56 @@ void UiEngine::resetStopwatch() {
 // -----------------------------------------------------------------------------
 void UiEngine::drawSettingsInfoScreen(bool fullRedraw) {
     Adafruit_ST7789& tft = Display.getTft();
+    const SensorData& sens = Sensors.getData();
 
     if (fullRedraw) {
         tft.fillScreen(COLOR_BLACK);
-        drawHeader("НАСТРОЙКИ & WI-FI", false);
+        drawHeader("НАСТРОЙКИ & ДИАГНОСТИКА", false);
 
         tft.drawRoundRect(10, 32, 300, 175, 4, COLOR_DARK_GRAY);
 
         tft.setTextColor(COLOR_BMW_AMBER_BRIGHT);
         tft.setTextSize(1);
-        tft.setCursor(20, 44);
-        tft.print("БЕСПРОВОДНОЙ ПОРТАЛ НАСТРОЙКИ:");
+        tft.setCursor(20, 42);
+        tft.print("СТАТУС ШИНЫ MEGASQUIRT 2 (CAN):");
+
+        // Статус связи с MS2
+        tft.setCursor(20, 58);
+        if (sens.ms2Online) {
+            tft.setTextColor(COLOR_STATUS_OK);
+            tft.printf("CAN 500k: ПОДКЛЮЧЕН (Пакетов: %lu)", sens.ms2.packetsTotal);
+        } else {
+            tft.setTextColor(COLOR_STATUS_ERR);
+            tft.print("CAN 500k: НЕТ СВЯЗИ (Проверьте CTX/CRX)");
+        }
 
         tft.setTextColor(COLOR_WHITE);
-        tft.setCursor(20, 64);
-        tft.printf("Wi-Fi Точка:  %s", AP_SSID);
-
-        tft.setCursor(20, 82);
-        tft.printf("Пароль:       %s", AP_PASSWORD);
+        tft.setCursor(20, 74);
+        tft.printf("Wi-Fi Точка:  %s  (Pass: %s)", AP_SSID, AP_PASSWORD);
 
         tft.setTextColor(COLOR_STATUS_OK);
-        tft.setCursor(20, 100);
+        tft.setCursor(20, 90);
         tft.print("Web-адрес:    http://192.168.4.1");
 
         tft.setTextColor(COLOR_MID_GRAY);
-        tft.drawFastHLine(20, 118, 280, COLOR_DARK_GRAY);
+        tft.drawFastHLine(20, 106, 280, COLOR_DARK_GRAY);
 
-        tft.setCursor(20, 128);
-        tft.printf("ESP32-S3 Flash: %d MB", ESP.getFlashChipSize() / (1024 * 1024));
+        tft.setCursor(20, 116);
+        tft.printf("Пины CAN:     TX: GPIO %d, RX: GPIO %d", PIN_CAN_TX, PIN_CAN_RX);
 
-        tft.setCursor(20, 146);
-        tft.printf("Free Heap RAM:  %d KB", ESP.getFreeHeap() / 1024);
+        tft.setCursor(20, 132);
+        tft.printf("Free Heap:    %d KB / Flash: %d MB", ESP.getFreeHeap() / 1024, ESP.getFlashChipSize() / (1024 * 1024));
+
+        tft.setCursor(20, 148);
+        tft.printf("Подсветка:    ШИМ %d / 255", Display.getBrightness());
 
         tft.setCursor(20, 164);
-        tft.printf("Подсветка (ШИМ): %d / 255", Display.getBrightness());
+        tft.printf("NTP Сервер:   %s", NTP_SERVER_1);
 
-        tft.setCursor(20, 182);
-        tft.printf("NTP сервер:     %s", NTP_SERVER_1);
+        tft.setCursor(20, 180);
+        tft.printf("Базовый ID:   1520 (Adv) / 1512 (Dash)");
 
-        drawFooter("КЛИК: ДАЛЕЕ", "BMW E36 1991");
+        drawFooter("КЛИК: ДАЛЕЕ", "BMW E36 MS2");
     }
 }
 

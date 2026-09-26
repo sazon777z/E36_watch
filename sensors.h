@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include "config.h"
+#include "can_driver.h"
 
 enum class VoltageStatus {
     VOLT_CRITICAL_LOW,   // < 11.5V (Сильный разряд АКБ)
@@ -20,6 +21,8 @@ struct SensorData {
     float tempOutdoor;
     float tempCabin;
     bool headlightsOn;
+    bool ms2Online;
+    Ms2Telemetry ms2;
 };
 
 class SensorsManager {
