@@ -51,6 +51,7 @@ private:
     float lastTemp;
     bool lastBleState;
     bool colonState;
+    bool lastColonState;
     unsigned long lastColonBlinkMillis;
 
     // Секундомер

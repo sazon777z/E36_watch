@@ -106,17 +106,11 @@ void loop() {
 
     // 6. Обработка нажатий физической кнопки
     if (Sensors.isNextButtonPressed()) {
-        if (UI.getCurrentScreen() == ScreenId::M_PERFORMANCE) {
-            UI.toggleStopwatch(); // В спортивном режиме короткий клик запускает/останавливает таймер
-        } else {
-            UI.nextScreen();      // В остальных режимах переключает экран
-        }
+        UI.nextScreen();      // Переключение на следующий экран в любом режиме
     }
 
     if (Sensors.isNextButtonHeld()) {
-        if (UI.getCurrentScreen() == ScreenId::M_PERFORMANCE) {
-            UI.resetStopwatch();  // Длинный клик в режиме M сбрасывает таймер
-        } else if (UI.getCurrentScreen() == ScreenId::OBC_TRIP_FUEL) {
+        if (UI.getCurrentScreen() == ScreenId::OBC_TRIP_FUEL) {
             Trip.resetTrip();     // Сброс суточного пробега на экране расхода
         } else {
             Sensors.resetVoltageExtremes(); // Сброс минимального пускового напряжения

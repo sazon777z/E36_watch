@@ -20,6 +20,7 @@ UiEngine::UiEngine()
       lastTemp(-99.0f),
       lastBleState(false),
       colonState(true),
+      lastColonState(true),
       lastColonBlinkMillis(0),
       stopwatchRunning(false),
       stopwatchStartMillis(0),
@@ -151,56 +152,72 @@ void UiEngine::drawClassicClockScreen(bool fullRedraw) {
         // Тонкая разделительная линия перед блоками телеметрии
         tft.drawFastHLine(15, 126, 290, COLOR_DARK_GRAY);
 
-        // Крупные подписи нижних блоков телеметрии (жирный наклонный)
-        tft.setFont(&FreeSansBoldOblique12pt7b);
+        // Подписи нижних блоков телеметрии (FreeSansBoldOblique9pt7b с идеальными промежутками)
+        tft.setFont(&FreeSansBoldOblique9pt7b);
         tft.setTextColor(COLOR_SILVER);
-        tft.setCursor(18, 155);
+        tft.setCursor(16, 152);
         tft.print("BOOST");
-        tft.setCursor(120, 155);
+        tft.setCursor(118, 152);
         tft.print("COOLANT");
-        tft.setCursor(220, 155);
-        tft.print("LAMBDA");
+        tft.setCursor(228, 152);
+        tft.print("AFR");
 
         lastHour = -1;
         lastMinute = -1;
         lastSecond = -1;
+        lastColonState = false;
         lastClockBoostStr[0] = '\0';
         lastClockCltStr[0] = '\0';
         lastClockAfrStr[0] = '\0';
         lastGpsSats = -1;
     }
 
-    // Мигание наклонного двоеточия раз в секунду (чистый белый)
+    // Мигание наклонного двоеточия раз в секунду
     if (millis() - lastColonBlinkMillis >= 500) {
         colonState = !colonState;
         lastColonBlinkMillis = millis();
-        BmwAssets::drawSlantedColon(tft, 98, 36, colonState, COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-        BmwAssets::drawSlantedColon(tft, 194, 46, colonState, COLOR_WHITE, COLOR_GHOST_SEG, 3, 9);
     }
 
-    // Отрисовка жирных наклонных белых цифр времени
-    if (fullRedraw || td.hour != lastHour || td.minute != lastMinute || td.second != lastSecond) {
-        char hBuf[3], mBuf[3], sBuf[3];
-        snprintf(hBuf, sizeof(hBuf), "%02d", td.hour);
-        snprintf(mBuf, sizeof(mBuf), "%02d", td.minute);
-        snprintf(sBuf, sizeof(sBuf), "%02d", td.second);
-
-        // ЧАСЫ (размер 4, наклон 12px, чистый белый цвет)
-        BmwAssets::drawSlantedBoldDigit(tft, 20, 36, hBuf[0], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-        BmwAssets::drawSlantedBoldDigit(tft, 58, 36, hBuf[1], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-
-        // МИНУТЫ (размер 4, наклон 12px, чистый белый цвет)
-        BmwAssets::drawSlantedBoldDigit(tft, 118, 36, mBuf[0], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-        BmwAssets::drawSlantedBoldDigit(tft, 156, 36, mBuf[1], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-
-        // СЕКУНДЫ (размер 3, наклон 9px, серебристо-белый цвет)
-        BmwAssets::drawSlantedBoldDigit(tft, 210, 46, sBuf[0], COLOR_SILVER, COLOR_GHOST_SEG, 3, 9);
-        BmwAssets::drawSlantedBoldDigit(tft, 238, 46, sBuf[1], COLOR_SILVER, COLOR_GHOST_SEG, 3, 9);
-
+    // Отрисовка ЧАСОВ крупным курсивным шрифтом FreeSansBoldOblique (не 7-сегментный, без секунд)
+    if (fullRedraw || td.hour != lastHour) {
         lastHour = td.hour;
-        lastMinute = td.minute;
-        lastSecond = td.second;
+        char hBuf[4];
+        snprintf(hBuf, sizeof(hBuf), "%02d", td.hour);
+        tft.fillRect(70, 44, 78, 56, COLOR_BLACK);
+        tft.setFont(&FreeSansBoldOblique18pt7b);
+        tft.setTextSize(2);
+        tft.setTextColor(COLOR_WHITE);
+        tft.setCursor(72, 96);
+        tft.print(hBuf);
     }
+
+    // Двоеточие между часами и минутами (мигание)
+    if (fullRedraw || colonState != lastColonState) {
+        lastColonState = colonState;
+        tft.fillRect(148, 44, 24, 56, COLOR_BLACK);
+        if (colonState) {
+            tft.setFont(&FreeSansBoldOblique18pt7b);
+            tft.setTextSize(2);
+            tft.setTextColor(COLOR_WHITE);
+            tft.setCursor(148, 96);
+            tft.print(":");
+        }
+    }
+
+    // МИНУТЫ
+    if (fullRedraw || td.minute != lastMinute) {
+        lastMinute = td.minute;
+        char mBuf[4];
+        snprintf(mBuf, sizeof(mBuf), "%02d", td.minute);
+        tft.fillRect(172, 44, 78, 56, COLOR_BLACK);
+        tft.setFont(&FreeSansBoldOblique18pt7b);
+        tft.setTextSize(2);
+        tft.setTextColor(COLOR_WHITE);
+        tft.setCursor(172, 96);
+        tft.print(mBuf);
+    }
+
+    tft.setTextSize(1); // Возврат стандартного масштаба шрифта
 
     // Обновление нижних значений телеметрии (ТОЛЬКО ПРИ ИЗМЕНЕНИИ СТРОКИ ДЛЯ ИСКЛЮЧЕНИЯ МЕРЦАНИЯ)
     tft.setFont(&FreeSansBoldOblique18pt7b);
@@ -215,8 +232,8 @@ void UiEngine::drawClassicClockScreen(bool fullRedraw) {
     }
     if (fullRedraw || strcmp(curBoostStr, lastClockBoostStr) != 0) {
         strncpy(lastClockBoostStr, curBoostStr, sizeof(lastClockBoostStr));
-        tft.fillRect(18, 172, 98, 42, COLOR_BLACK);
-        tft.setCursor(18, 206);
+        tft.fillRect(14, 172, 96, 42, COLOR_BLACK);
+        tft.setCursor(14, 206);
         tft.print(curBoostStr);
     }
 
@@ -225,22 +242,22 @@ void UiEngine::drawClassicClockScreen(bool fullRedraw) {
     snprintf(curCltStr, sizeof(curCltStr), "%+.0fC", sens.tempOutdoor);
     if (fullRedraw || strcmp(curCltStr, lastClockCltStr) != 0) {
         strncpy(lastClockCltStr, curCltStr, sizeof(lastClockCltStr));
-        tft.fillRect(120, 172, 95, 42, COLOR_BLACK);
-        tft.setCursor(120, 206);
+        tft.fillRect(118, 172, 96, 42, COLOR_BLACK);
+        tft.setCursor(118, 206);
         tft.print(curCltStr);
     }
 
-    // 3. Смесь AFR / LAMBDA
+    // 3. Смесь AFR (вместо LAMBDA, без наложения на COOLANT)
     char curAfrStr[16];
     if (sens.ms2Online) {
         snprintf(curAfrStr, sizeof(curAfrStr), "%.1f", sens.ms2.afr);
     } else {
-        snprintf(curAfrStr, sizeof(curAfrStr), "%.1fV", sens.batteryVoltage);
+        snprintf(curAfrStr, sizeof(curAfrStr), "--.-");
     }
     if (fullRedraw || strcmp(curAfrStr, lastClockAfrStr) != 0) {
         strncpy(lastClockAfrStr, curAfrStr, sizeof(lastClockAfrStr));
-        tft.fillRect(220, 172, 98, 42, COLOR_BLACK);
-        tft.setCursor(220, 206);
+        tft.fillRect(226, 172, 90, 42, COLOR_BLACK);
+        tft.setCursor(228, 206);
         tft.print(curAfrStr);
     }
 
@@ -665,31 +682,15 @@ void UiEngine::drawMPerformanceScreen(bool fullRedraw) {
         tft.setFont(); // Сброс
 
     } else {
-        // Резервный секундомер (если MS2 оффлайн)
-        unsigned long currentElapsed = stopwatchElapsedMillis;
-        if (stopwatchRunning) {
-            currentElapsed += (millis() - stopwatchStartMillis);
+        // MS2 оффлайн: статус ожидания CAN пакетов (замеры отключены)
+        if (fullRedraw) {
+            tft.fillRect(25, 40, 270, 50, COLOR_BLACK);
+            tft.setFont(&FreeSansBoldOblique12pt7b);
+            tft.setTextColor(COLOR_MID_GRAY);
+            tft.setCursor(35, 78);
+            tft.print("WAITING MS2 CAN...");
+            tft.setFont();
         }
-        unsigned long totalSec = currentElapsed / 1000;
-        unsigned long msFraction = (currentElapsed % 1000) / 100;
-        int m = totalSec / 60;
-        int s = totalSec % 60;
-
-        char timeBuf[12];
-        snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d.%1d", m, s, (int)msFraction);
-
-        tft.fillRect(25, 40, 270, 50, COLOR_BLACK);
-        tft.setFont(&FreeSansBoldOblique18pt7b);
-        tft.setTextColor(COLOR_WHITE);
-        tft.setCursor(45, 78);
-        tft.print(timeBuf);
-
-        tft.fillRect(28, 96, 250, 26, COLOR_BLACK);
-        tft.setFont(&FreeSansBoldOblique12pt7b);
-        tft.setTextColor(stopwatchRunning ? COLOR_WHITE : COLOR_SILVER);
-        tft.setCursor(35, 118);
-        tft.print(stopwatchRunning ? ">> TIMING..." : "[ READY ]");
-        tft.setFont();
     }
 
     // Крупный индикатор спутников в правом верхнем углу
@@ -697,20 +698,11 @@ void UiEngine::drawMPerformanceScreen(bool fullRedraw) {
 }
 
 void UiEngine::toggleStopwatch() {
-    if (stopwatchRunning) {
-        stopwatchElapsedMillis += (millis() - stopwatchStartMillis);
-        stopwatchRunning = false;
-    } else {
-        stopwatchStartMillis = millis();
-        stopwatchRunning = true;
-    }
+    // Замеры отключены по запросу пользователя
 }
 
 void UiEngine::resetStopwatch() {
-    stopwatchRunning = false;
-    stopwatchStartMillis = 0;
-    stopwatchElapsedMillis = 0;
-    needsFullRedraw = true;
+    // Замеры отключены по запросу пользователя
 }
 
 // -----------------------------------------------------------------------------
