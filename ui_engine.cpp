@@ -534,6 +534,7 @@ void UiEngine::nextScreen() {
     if (next >= (int)ScreenId::COUNT) {
         next = (int)ScreenId::CLASSIC_CLOCK;
     }
+    Serial.printf("[UI] Переключение экрана: %d -> %d\n", (int)currentScreen, next);
     setScreen((ScreenId)next);
 }
 
@@ -550,7 +551,7 @@ void UiEngine::setScreen(ScreenId screen) {
             default: target = scr_clock; break;
         }
         if (target) {
-            lv_scr_load_anim(target, LV_SCR_LOAD_ANIM_FADE_ON, 150, 0, false);
+            lv_scr_load(target);
         }
     }
 }
@@ -612,7 +613,11 @@ void UiEngine::updateClockScreen() {
         lv_label_set_text_fmt(lbl_gps_sats_1, LV_SYMBOL_GPS " %d", gps.satellites);
     } else {
         lv_obj_set_style_text_color(lbl_gps_sats_1, COLOR_LV_MID_GRAY, 0);
-        lv_label_set_text_fmt(lbl_gps_sats_1, LV_SYMBOL_GPS " %s", gps.satellites > 0 ? String(gps.satellites).c_str() : "--");
+        if (gps.satellites > 0) {
+            lv_label_set_text_fmt(lbl_gps_sats_1, LV_SYMBOL_GPS " %d", gps.satellites);
+        } else {
+            lv_label_set_text(lbl_gps_sats_1, LV_SYMBOL_GPS " --");
+        }
     }
 
     // Наддув (BOOST)
@@ -654,7 +659,11 @@ void UiEngine::updateTripScreen() {
     } else {
         lv_label_set_text(lbl_trip_fix, "NO FIX");
         lv_obj_set_style_text_color(lbl_gps_sats_2, COLOR_LV_MID_GRAY, 0);
-        lv_label_set_text_fmt(lbl_gps_sats_2, LV_SYMBOL_GPS " %s", gps.satellites > 0 ? String(gps.satellites).c_str() : "--");
+        if (gps.satellites > 0) {
+            lv_label_set_text_fmt(lbl_gps_sats_2, LV_SYMBOL_GPS " %d", gps.satellites);
+        } else {
+            lv_label_set_text(lbl_gps_sats_2, LV_SYMBOL_GPS " --");
+        }
     }
 
     // Мгновенный расход
@@ -681,7 +690,11 @@ void UiEngine::updateTelemScreen() {
         lv_label_set_text_fmt(lbl_gps_sats_3, LV_SYMBOL_GPS " %d", gps.satellites);
     } else {
         lv_obj_set_style_text_color(lbl_gps_sats_3, COLOR_LV_MID_GRAY, 0);
-        lv_label_set_text_fmt(lbl_gps_sats_3, LV_SYMBOL_GPS " %s", gps.satellites > 0 ? String(gps.satellites).c_str() : "--");
+        if (gps.satellites > 0) {
+            lv_label_set_text_fmt(lbl_gps_sats_3, LV_SYMBOL_GPS " %d", gps.satellites);
+        } else {
+            lv_label_set_text(lbl_gps_sats_3, LV_SYMBOL_GPS " --");
+        }
     }
 
     // 1. АКБ
@@ -738,7 +751,11 @@ void UiEngine::updateMPerfScreen() {
         lv_label_set_text_fmt(lbl_gps_sats_4, LV_SYMBOL_GPS " %d", gps.satellites);
     } else {
         lv_obj_set_style_text_color(lbl_gps_sats_4, COLOR_LV_MID_GRAY, 0);
-        lv_label_set_text_fmt(lbl_gps_sats_4, LV_SYMBOL_GPS " %s", gps.satellites > 0 ? String(gps.satellites).c_str() : "--");
+        if (gps.satellites > 0) {
+            lv_label_set_text_fmt(lbl_gps_sats_4, LV_SYMBOL_GPS " %d", gps.satellites);
+        } else {
+            lv_label_set_text(lbl_gps_sats_4, LV_SYMBOL_GPS " --");
+        }
     }
 
     if (sens.ms2Online) {
