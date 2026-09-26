@@ -18,12 +18,13 @@ SensorsManager::SensorsManager()
 }
 
 void SensorsManager::init() {
-    pinMode(PIN_VOLTAGE_ADC, INPUT);
+    if (PIN_VOLTAGE_ADC >= 0) {
+        pinMode(PIN_VOLTAGE_ADC, INPUT);
+        filteredAdcRaw = analogRead(PIN_VOLTAGE_ADC);
+    }
     pinMode(PIN_BTN_NEXT, INPUT_PULLUP);
     pinMode(PIN_ILLUMINATION, INPUT_PULLDOWN);
 
-    // Начальный замер АЦП
-    filteredAdcRaw = analogRead(PIN_VOLTAGE_ADC);
     updateBatteryVoltage();
     data.minCrankVoltage = data.batteryVoltage;
     data.maxVoltage = data.batteryVoltage;
@@ -45,8 +46,8 @@ void SensorsManager::updateBatteryVoltage() {
     if (data.ms2Online && data.ms2.batt_volt > 5.0f) {
         // Данные напряжения поступают напрямую из ЭБУ MegaSquirt 2 с высокой точностью
         data.batteryVoltage = data.ms2.batt_volt;
-    } else {
-        // Резервное чтение через встроенный АЦП ESP32-S3 (если CAN не подключен)
+    } else if (PIN_VOLTAGE_ADC >= 0) {
+        // Резервное чтение через встроенный АЦП ESP32-S3 (если настроен)
         int raw = analogRead(PIN_VOLTAGE_ADC);
         filteredAdcRaw = (filteredAdcRaw * 0.85f) + (raw * 0.15f);
         float pinVoltage = (filteredAdcRaw / ADC_RESOLUTION) * ADC_VREF;
@@ -56,6 +57,9 @@ void SensorsManager::updateBatteryVoltage() {
             calculatedVolt = 13.8f; // Тестовое значение бортсети при стендовых испытаниях
         }
         data.batteryVoltage = calculatedVolt;
+    } else {
+        // Режим без АЦП (ожидание CAN) - тестовое напряжение для стенда
+        data.batteryVoltage = 13.8f;
     }
 
     // Отслеживание экстремумов

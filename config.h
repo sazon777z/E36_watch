@@ -15,7 +15,7 @@
 #define PIN_TFT_BL        8   // Подсветка (ШИМ / LEDC)
 
 // Дополнительные входы/выходы (при необходимости)
-#define PIN_VOLTAGE_ADC   7   // АЦП для измерения напряжения АКБ (через делитель)
+#define PIN_VOLTAGE_ADC   -1  // Отключен (напряжение читается по CAN из MS2; GPIO 7 занят под CAN_RX)
 #define PIN_BTN_NEXT      14  // Кнопка переключения экранов (с подтяжкой к VCC/GND)
 #define PIN_ONEWIRE_TEMP  15  // Шина 1-Wire для датчика температуры DS18B20
 #define PIN_ILLUMINATION  16  // Вход сигнала габаритов/фар (для авто-диммирования)
@@ -23,8 +23,8 @@
 // =============================================================================
 // НАСТРОЙКИ CAN-ШИНЫ (WCMCU-230 / SN65HVD230) ДЛЯ MEGASQUIRT 2
 // =============================================================================
-#define PIN_CAN_TX        43  // CTX трансивера (вывод TX платы ESP32-S3)
-#define PIN_CAN_RX        44  // CRX трансивера (вывод RX платы ESP32-S3)
+#define PIN_CAN_TX        6   // CTX трансивера WCMCU-230 (GPIO 6)
+#define PIN_CAN_RX        7   // CRX трансивера WCMCU-230 (GPIO 7)
 #define CAN_SPEED_KBPS    500 // Стандартная скорость шины CAN MegaSquirt 2
 #define MS2_BASE_ID_ADV   1520 // Расширенное вещание MS2 Realtime Broadcast
 #define MS2_BASE_ID_DASH  1512 // Упрощенное вещание MS2 Dash Broadcast
