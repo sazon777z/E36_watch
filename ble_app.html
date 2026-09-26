@@ -297,6 +297,31 @@
             </div>
         </div>
 
+        <!-- GPS & Бортовой компьютер -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic;">GPS И БОРТОВОЙ КОМПЬЮТЕР:</span>
+                <button style="background: none; border: 1px solid #444; color: #aaa; font-size: 10px; padding: 2px 6px; border-radius: 3px; cursor: pointer;" onclick="sendCmd('resettrip')">СБРОС ТРИПА</button>
+            </div>
+            <div class="grid-3">
+                <div class="tele-card">
+                    <div class="tele-label">SPEED</div>
+                    <div class="tele-val" id="valSpd">---</div>
+                </div>
+                <div class="tele-card">
+                    <div class="tele-label">TRIP KM</div>
+                    <div class="tele-val" id="valTrip">---</div>
+                </div>
+                <div class="tele-card">
+                    <div class="tele-label">РАСХОД</div>
+                    <div class="tele-val" id="valFuel">---</div>
+                </div>
+            </div>
+            <div style="margin-top: 8px; font-size: 11px; color: #888; text-align: right;">
+                Общий одометр: <span id="valOdo" style="color: #fff; font-weight: 700;">---</span> км
+            </div>
+        </div>
+
         <!-- Управление дисплеем -->
         <div class="card">
             <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic;">
@@ -308,11 +333,12 @@
             </div>
 
             <div style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic; margin-top: 16px;">ПЕРЕКЛЮЧИТЬ ЭКРАН:</div>
-            <div class="btn-group-screens">
+            <div class="btn-group-screens" style="grid-template-columns: repeat(5, 1fr);">
                 <button class="btn-screen" onclick="sendCmd('screen 1')">ЧАСЫ</button>
-                <button class="btn-screen" onclick="sendCmd('screen 2')">МОТОР</button>
-                <button class="btn-screen" onclick="sendCmd('screen 3')">ТАХОМЕТР</button>
-                <button class="btn-screen" onclick="sendCmd('screen 4')">ИНФО</button>
+                <button class="btn-screen" onclick="sendCmd('screen 2')">ТРИП</button>
+                <button class="btn-screen" onclick="sendCmd('screen 3')">МОТОР</button>
+                <button class="btn-screen" onclick="sendCmd('screen 4')">М-ТАХО</button>
+                <button class="btn-screen" onclick="sendCmd('screen 5')">ИНФО</button>
             </div>
         </div>
 
@@ -415,6 +441,10 @@
                     if (data.clt !== undefined) document.getElementById('valClt').textContent = Math.round(data.clt) + '°C';
                     if (data.afr !== undefined) document.getElementById('valAfr').textContent = data.afr.toFixed(1);
                     if (data.volt !== undefined) document.getElementById('valVolt').textContent = data.volt.toFixed(1) + 'V';
+                    if (data.spd !== undefined) document.getElementById('valSpd').textContent = Math.round(data.spd);
+                    if (data.trip !== undefined) document.getElementById('valTrip').textContent = data.trip.toFixed(1);
+                    if (data.odo !== undefined) document.getElementById('valOdo').textContent = Math.round(data.odo);
+                    if (data.fuel !== undefined) document.getElementById('valFuel').textContent = data.fuel.toFixed(1);
                 } catch (e) {}
             } else {
                 log('< ' + text);

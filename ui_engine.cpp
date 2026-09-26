@@ -1,5 +1,7 @@
 #include "ui_engine.h"
 #include "ble_manager.h"
+#include "gps_driver.h"
+#include "trip_computer.h"
 #include <Fonts/FreeSansBoldOblique9pt7b.h>
 #include <Fonts/FreeSansBoldOblique12pt7b.h>
 #include <Fonts/FreeSansBoldOblique18pt7b.h>
@@ -87,40 +89,55 @@ void UiEngine::drawHeader(const char* title, bool showStatusIcons) {
 
     if (showStatusIcons) {
         const SensorData& sens = Sensors.getData();
-        // Иконка АКБ и напряжение (чистый белый)
-        BmwAssets::drawBattery(tft, 8, 5, COLOR_WHITE, sens.batteryVoltage);
+        const GpsData& gps = Gps.getData();
+
+        // 1. Иконка АКБ и напряжение (чистый белый)
+        BmwAssets::drawBattery(tft, 6, 5, COLOR_WHITE, sens.batteryVoltage);
         tft.setTextColor(COLOR_WHITE);
         tft.setTextSize(1);
-        tft.setCursor(35, 7);
+        tft.setCursor(32, 7);
         tft.printf("%.1fV", sens.batteryVoltage);
 
-        // Индикатор связи с ЭБУ MegaSquirt 2
-        tft.setCursor(76, 7);
+        // 2. Индикатор связи с ЭБУ MegaSquirt 2
+        tft.setCursor(70, 7);
         if (sens.ms2Online) {
             tft.setTextColor(COLOR_WHITE);
-            tft.print("[MS2:OK]");
+            tft.print("[MS2]");
         } else {
             tft.setTextColor(COLOR_MID_GRAY);
             tft.print("[MS2:OFF]");
         }
 
-        // Температура ОЖ мотора (CLT) из MS2
-        BmwAssets::drawThermometer(tft, 222, 5, COLOR_WHITE);
+        // 3. Индикатор спутника GPS
+        BmwAssets::drawSatellite(tft, 126, 4, COLOR_WHITE, gps.hasFix);
+        tft.setCursor(144, 7);
+        if (gps.hasFix) {
+            tft.setTextColor(COLOR_WHITE);
+            tft.printf("%d", gps.satellites);
+        } else {
+            tft.setTextColor(COLOR_MID_GRAY);
+            tft.print("--");
+        }
+
+        // 4. Температура ОЖ мотора (CLT) из MS2
+        BmwAssets::drawThermometer(tft, 224, 5, COLOR_WHITE);
         tft.setTextColor(COLOR_WHITE);
-        tft.setCursor(236, 7);
+        tft.setCursor(238, 7);
         tft.printf("%+.0fC", sens.tempOutdoor);
 
-        // Статус Bluetooth Low Energy (BLE)
+        // 5. Статус Bluetooth Low Energy (BLE)
         bool bleOk = BleMgr.isConnected();
         BmwAssets::drawBluetooth(tft, 298, 4, COLOR_WHITE, bleOk);
     }
 
-    // Заголовок по центру
-    tft.setTextColor(COLOR_SILVER);
-    tft.setTextSize(1);
-    int16_t xCenter = (SCREEN_WIDTH - (strlen(title) * 6)) / 2;
-    tft.setCursor(xCenter, 7);
-    tft.print(title);
+    // Заголовок по центру (если статус-иконки скрыты)
+    if (!showStatusIcons && title) {
+        tft.setTextColor(COLOR_SILVER);
+        tft.setTextSize(1);
+        int16_t xCenter = (SCREEN_WIDTH - (strlen(title) * 6)) / 2;
+        tft.setCursor(xCenter, 7);
+        tft.print(title);
+    }
 }
 
 void UiEngine::drawFooter(const char* leftText, const char* rightText) {
@@ -237,7 +254,108 @@ void UiEngine::drawClassicClockScreen(bool fullRedraw) {
 }
 
 // -----------------------------------------------------------------------------
-// ЭКРАН 2: ТЕЛЕМЕТРИЯ И БОРТОВОЙ КОМПЬЮТЕР (OBC TELEMETRY & ENGINE)
+// ЭКРАН 2: БОРТОВОЙ КОМПЬЮТЕР, ОДОМЕТР И РАСХОД ТОПЛИВА (OBC TRIP & FUEL)
+// -----------------------------------------------------------------------------
+void UiEngine::drawObcTripFuelScreen(bool fullRedraw) {
+    Adafruit_ST7789& tft = Display.getTft();
+    const TripData& trip = Trip.getData();
+    const GpsData& gps = Gps.getData();
+
+    if (fullRedraw) {
+        tft.fillScreen(COLOR_BLACK);
+        drawHeader("OBC TRIP & FUEL", true);
+
+        // Горизонтальные разделители
+        tft.drawFastHLine(10, 108, 300, COLOR_DARK_GRAY);
+        tft.drawFastHLine(10, 166, 300, COLOR_DARK_GRAY);
+        tft.drawFastVLine(158, 114, 98, COLOR_DARK_GRAY);
+
+        // Статические подписи нижних квадрантов (жирный наклонный)
+        tft.setFont(&FreeSansBoldOblique9pt7b);
+        tft.setTextColor(COLOR_SILVER);
+
+        tft.setCursor(16, 126);
+        tft.print("TRIP DISTANCE:");
+
+        tft.setCursor(168, 126);
+        tft.print("AVG CONSUMPTION:");
+
+        tft.setCursor(16, 182);
+        tft.print("TOTAL ODOMETER:");
+
+        tft.setCursor(168, 182);
+        tft.print("FUEL / AVG SPEED:");
+
+        drawFooter("HOLD: RESET TRIP", "GPS NEO-7M & MS2");
+    }
+
+    // 1. СКОРОСТЬ GPS (Крупные жирные наклонные цифры)
+    char spdBuf[5];
+    int spd = (int)trip.current_speed_kmh;
+    if (spd > 999) spd = 999;
+    snprintf(spdBuf, sizeof(spdBuf), "%3d", spd);
+
+    // Отрисовка 3 цифр скорости (X = 14, 52, 90, Y = 32)
+    BmwAssets::drawSlantedBoldDigit(tft, 14, 32, spdBuf[0], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+    BmwAssets::drawSlantedBoldDigit(tft, 52, 32, spdBuf[1], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+    BmwAssets::drawSlantedBoldDigit(tft, 90, 32, spdBuf[2], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+
+    // Подпись KM/H
+    tft.setFont(&FreeSansBoldOblique9pt7b);
+    tft.setTextColor(COLOR_SILVER);
+    tft.setCursor(132, 55);
+    tft.print("KM/H");
+    if (!gps.hasFix) {
+        tft.setTextColor(COLOR_MID_GRAY);
+        tft.setCursor(130, 80);
+        tft.print("NO FIX");
+    } else {
+        tft.fillRect(130, 68, 40, 20, COLOR_BLACK);
+    }
+
+    // 2. МГНОВЕННЫЙ РАСХОД (справа от спидометра)
+    tft.fillRect(174, 28, 142, 76, COLOR_BLACK);
+    tft.setCursor(176, 44);
+    tft.setTextColor(COLOR_SILVER);
+    tft.setFont(&FreeSansBoldOblique9pt7b);
+    tft.print(trip.isLitersPerHour ? "INSTANT (L/H):" : "INSTANT (L/100):");
+
+    tft.setFont(&FreeSansBoldOblique18pt7b);
+    tft.setTextColor(COLOR_WHITE);
+    tft.setCursor(176, 85);
+    tft.printf("%.1f", trip.instant_consumption);
+
+    // 3. КВАДРАНТ 1: Суточный пробег (Trip Distance)
+    tft.fillRect(16, 132, 138, 28, COLOR_BLACK);
+    tft.setFont(&FreeSansBoldOblique12pt7b);
+    tft.setTextColor(COLOR_WHITE);
+    tft.setCursor(16, 154);
+    tft.printf("%.1f km", trip.trip_distance_km);
+
+    // 4. КВАДРАНТ 2: Средний расход (Avg Consumption)
+    tft.fillRect(168, 132, 148, 28, COLOR_BLACK);
+    tft.setCursor(168, 154);
+    if (trip.trip_distance_km >= 0.1f) {
+        tft.printf("%.1f L", trip.avg_consumption_l_100km);
+    } else {
+        tft.print("--- L");
+    }
+
+    // 5. КВАДРАНТ 3: Общий одометр (Total Odometer)
+    tft.fillRect(16, 188, 138, 26, COLOR_BLACK);
+    tft.setCursor(16, 207);
+    tft.printf("%.0f km", trip.total_odometer_km);
+
+    // 6. КВАДРАНТ 4: Израсходовано топлива / Средняя скорость
+    tft.fillRect(168, 188, 148, 26, COLOR_BLACK);
+    tft.setCursor(168, 207);
+    tft.printf("%.1fL / %.0f", trip.trip_fuel_liters, trip.avg_speed_kmh);
+
+    tft.setFont(); // Сброс шрифта
+}
+
+// -----------------------------------------------------------------------------
+// ЭКРАН 3: ТЕЛЕМЕТРИЯ И БОРТОВОЙ КОМПЬЮТЕР (OBC TELEMETRY & ENGINE)
 // -----------------------------------------------------------------------------
 void UiEngine::drawObcTelemetryScreen(bool fullRedraw) {
     Adafruit_ST7789& tft = Display.getTft();
@@ -533,12 +651,18 @@ void UiEngine::drawSettingsInfoScreen(bool fullRedraw) {
         tft.setCursor(18, 156);
         tft.printf("CAN:    TX: GPIO %d, RX: GPIO %d (500k)", PIN_CAN_TX, PIN_CAN_RX);
 
+        // Статус GPS
+        const GpsData& gps = Gps.getData();
+        tft.setCursor(18, 170);
+        tft.printf("GPS:    RX: GPIO %d, TX: GPIO %d (Fix: %s, Sats: %d)", 
+                   PIN_GPS_RX, PIN_GPS_TX, gps.hasFix ? "3D-OK" : "SEARCH", gps.satellites);
+
         // Системные данные
         tft.setTextColor(COLOR_SILVER);
-        tft.setCursor(18, 180);
+        tft.setCursor(18, 186);
         tft.printf("Free Heap: %d KB  |  Brightness: %d/255", ESP.getFreeHeap() / 1024, Display.getBrightness());
 
-        tft.setCursor(18, 196);
+        tft.setCursor(18, 200);
         tft.printf("App:    Web Bluetooth (ble_app.html) / NUS App");
 
         drawFooter("CLICK: NEXT SCREEN", "BMW E36 1991");
@@ -555,6 +679,9 @@ void UiEngine::update() {
     switch (currentScreen) {
         case ScreenId::CLASSIC_CLOCK:
             drawClassicClockScreen(full);
+            break;
+        case ScreenId::OBC_TRIP_FUEL:
+            drawObcTripFuelScreen(full);
             break;
         case ScreenId::OBC_TELEMETRY:
             drawObcTelemetryScreen(full);

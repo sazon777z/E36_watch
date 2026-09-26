@@ -11,6 +11,7 @@
 enum class ScreenId {
     BOOT_SPLASH = 0,
     CLASSIC_CLOCK,
+    OBC_TRIP_FUEL,
     OBC_TELEMETRY,
     M_PERFORMANCE,
     SETTINGS_INFO,
@@ -59,6 +60,7 @@ private:
 
     // Отрисовка конкретных экранов
     void drawClassicClockScreen(bool fullRedraw);
+    void drawObcTripFuelScreen(bool fullRedraw);
     void drawObcTelemetryScreen(bool fullRedraw);
     void drawMPerformanceScreen(bool fullRedraw);
     void drawSettingsInfoScreen(bool fullRedraw);

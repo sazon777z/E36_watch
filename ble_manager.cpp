@@ -3,6 +3,8 @@
 #include "display_driver.h"
 #include "sensors.h"
 #include "ui_engine.h"
+#include "gps_driver.h"
+#include "trip_computer.h"
 
 BleManager BleMgr;
 
@@ -100,11 +102,14 @@ void BleManager::update() {
         lastTelemetryBroadcast = millis();
         const SensorData& s = Sensors.getData();
         const TimeData& t = Time.getTime();
+        const TripData& tr = Trip.getData();
+        const GpsData& g = Gps.getData();
 
-        char jsonBuf[128];
+        char jsonBuf[192];
         snprintf(jsonBuf, sizeof(jsonBuf), 
-                 "{\"rpm\":%d,\"clt\":%.1f,\"boost\":%.2f,\"afr\":%.1f,\"volt\":%.1f,\"time\":\"%02d:%02d:%02d\"}\n",
+                 "{\"rpm\":%d,\"clt\":%.1f,\"boost\":%.2f,\"afr\":%.1f,\"volt\":%.1f,\"spd\":%.1f,\"trip\":%.1f,\"odo\":%.0f,\"fuel\":%.1f,\"time\":\"%02d:%02d:%02d\"}\n",
                  s.ms2.rpm, s.tempOutdoor, s.ms2.boost_bar, s.ms2.afr, s.batteryVoltage,
+                 tr.current_speed_kmh, tr.trip_distance_km, tr.total_odometer_km, tr.instant_consumption,
                  t.hour, t.minute, t.second);
 
         sendString(jsonBuf);
@@ -170,26 +175,39 @@ void BleManager::processCommand(const String& cmd) {
         Serial.printf("[BLE] Установлена яркость: %d\n", br);
     }
     else if (c.startsWith("screen ")) {
-        // Переключение экрана: screen 0..3
+        // Переключение экрана: screen 0..4
         int scr = c.substring(7).toInt();
-        if (scr >= 0 && scr <= 3) {
+        if (scr >= 0 && scr <= 4) {
             UI.setScreen((ScreenId)scr);
             sendString("OK: SCREEN CHANGED\n");
         } else {
-            sendString("ERR: SCREEN 0-3\n");
+            sendString("ERR: SCREEN 0-4\n");
+        }
+    }
+    else if (c.equalsIgnoreCase("resettrip")) {
+        Trip.resetTrip();
+        sendString("OK: TRIP RESET\n");
+    }
+    else if (c.startsWith("setodo ")) {
+        float km = c.substring(7).toFloat();
+        if (km >= 0) {
+            Trip.setTotalOdometer(km);
+            sendString("OK: ODOMETER SET\n");
         }
     }
     else if (c.equalsIgnoreCase("status")) {
         const SensorData& s = Sensors.getData();
-        char buf[160];
+        const TripData& tr = Trip.getData();
+        char buf[192];
         snprintf(buf, sizeof(buf), 
-                 "MS2: %s | RPM: %d | Boost: %.2fb | CLT: %.0fC | AFR: %.1f | Volt: %.1fV\n",
+                 "MS2: %s | RPM: %d | Spd: %.0f | Trip: %.1f | Odo: %.0f | Fuel: %.1f | CLT: %.0fC | Volt: %.1fV\n",
                  s.ms2Online ? "ONLINE" : "OFFLINE",
-                 s.ms2.rpm, s.ms2.boost_bar, s.tempOutdoor, s.ms2.afr, s.batteryVoltage);
+                 s.ms2.rpm, tr.current_speed_kmh, tr.trip_distance_km, tr.total_odometer_km,
+                 tr.instant_consumption, s.tempOutdoor, s.batteryVoltage);
         sendString(buf);
     }
     else if (c.equalsIgnoreCase("help")) {
-        sendString("CMDS: epoch <sec>, time HH:MM[:SS], date DD.MM.YYYY, bright <0-255>, screen <0-3>, status\n");
+        sendString("CMDS: epoch <sec>, time HH:MM[:SS], date DD.MM.YYYY, bright <0-255>, screen <0-4>, resettrip, setodo <km>, status\n");
     }
     else {
         sendString("ERR: UNKNOWN CMD (type 'help')\n");

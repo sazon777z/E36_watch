@@ -141,6 +141,25 @@ public:
         tft.fillRect(x + 4, y + 5, 2, 6, color);
     }
 
+    // Иконка спутника GPS
+    static void drawSatellite(Adafruit_ST7789& tft, int16_t x, int16_t y, uint16_t color, bool hasFix) {
+        uint16_t c = hasFix ? color : COLOR_MID_GRAY;
+        // Корпус спутника
+        tft.drawCircle(x + 6, y + 6, 3, c);
+        if (hasFix) {
+            tft.fillCircle(x + 6, y + 6, 2, c);
+        }
+        // Солнечные панели (крылья)
+        tft.drawFastHLine(x + 1, y + 6, 2, c);
+        tft.drawFastHLine(x + 10, y + 6, 2, c);
+        tft.drawFastVLine(x + 1, y + 4, 5, c);
+        tft.drawFastVLine(x + 11, y + 4, 5, c);
+        // Дуга радиосигнала
+        if (hasFix) {
+            tft.drawCircleHelper(x + 6, y + 6, 6, 4 | 8, c);
+        }
+    }
+
     // Аутентичный 7-сегментный индикатор BMW OBC (с теневыми неактивными сегментами)
     // Поддерживает цифры '0'-'9', ':', '-', ' '
     static void draw7SegmentDigit(Adafruit_ST7789& tft, int16_t x, int16_t y, char ch, 

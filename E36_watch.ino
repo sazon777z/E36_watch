@@ -30,6 +30,8 @@
 #include "bmw_theme.h"
 #include "display_driver.h"
 #include "can_driver.h"
+#include "gps_driver.h"
+#include "trip_computer.h"
 #include "time_keeper.h"
 #include "sensors.h"
 #include "ui_engine.h"
@@ -58,11 +60,15 @@ void setup() {
         Serial.println("[OK] CAN-шина MegaSquirt 2 (500 kbps) запущена.");
     }
 
-    // 3. Отображение фирменной заставки Megasquirt 2
+    // 3. Инициализация GPS-модуля NEO-7M (UART1 на GPIO 44/43)
+    Gps.init();
+
+    // 4. Отображение фирменной заставки Megasquirt 2
     UI.showBootSplash("CAN-BUS TELEMETRY");
 
-    // 4. Инициализация часов, сенсоров, UI и Bluetooth Low Energy
+    // 5. Инициализация часов, сенсоров, одометра/расхода, UI и Bluetooth LE
     Time.init();
+    Trip.init();
     Sensors.init();
     UI.init();
     BleMgr.init();
@@ -74,12 +80,18 @@ void loop() {
     // 1. Постоянный неблокирующий прием пакетов CAN-шины MegaSquirt 2
     CanBus.update();
 
-    // 2. Обслуживание Bluetooth Low Energy (NUS сервис)
+    // 2. Постоянное чтение и парсинг потока NMEA от GPS-модуля
+    Gps.update();
+
+    // 3. Расчет одометра и расхода топлива
+    Trip.update();
+
+    // 4. Обслуживание Bluetooth Low Energy (NUS сервис)
     BleMgr.update();
 
     unsigned long currentMillis = millis();
 
-    // 3. Периодический опрос датчиков и АЦП бортсети (каждые 100 мс)
+    // 5. Периодический опрос датчиков и АЦП бортсети (каждые 100 мс)
     if (currentMillis - lastSensorUpdate >= 100) {
         lastSensorUpdate = currentMillis;
         Sensors.update();
@@ -92,7 +104,7 @@ void loop() {
         }
     }
 
-    // 4. Обработка нажатий физической кнопки
+    // 6. Обработка нажатий физической кнопки
     if (Sensors.isNextButtonPressed()) {
         if (UI.getCurrentScreen() == ScreenId::M_PERFORMANCE) {
             UI.toggleStopwatch(); // В спортивном режиме короткий клик запускает/останавливает таймер
@@ -104,6 +116,8 @@ void loop() {
     if (Sensors.isNextButtonHeld()) {
         if (UI.getCurrentScreen() == ScreenId::M_PERFORMANCE) {
             UI.resetStopwatch();  // Длинный клик в режиме M сбрасывает таймер
+        } else if (UI.getCurrentScreen() == ScreenId::OBC_TRIP_FUEL) {
+            Trip.resetTrip();     // Сброс суточного пробега на экране расхода
         } else {
             Sensors.resetVoltageExtremes(); // Сброс минимального пускового напряжения
         }
