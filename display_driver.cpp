@@ -44,6 +44,7 @@ bool DisplayDriver::init() {
 
     // Стандартная инициализация ST7789 для дисплея 240x320
     tft->init(240, 320);
+    tft->setSPISpeed(40000000); // 40 MHz SPI для мгновенной отрисовки без задержек
     tft->setRotation(DISPLAY_ROTATION);
     tft->fillScreen(COLOR_BLACK);
 

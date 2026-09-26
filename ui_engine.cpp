@@ -25,7 +25,27 @@ UiEngine::UiEngine()
       stopwatchStartMillis(0),
       stopwatchElapsedMillis(0),
       lastGpsSats(-1),
-      lastGpsFix(false) {
+      lastGpsFix(false),
+      lastFixDisplay(false),
+      lastTelemBoostW(-1),
+      lastRpmVal(-1),
+      lastShiftBarW(-1) {
+    lastClockBoostStr[0] = '\0';
+    lastClockCltStr[0] = '\0';
+    lastClockAfrStr[0] = '\0';
+    lastSpdStr[0] = '\0';
+    lastInstStr[0] = '\0';
+    lastTripDistStr[0] = '\0';
+    lastAvgFuelStr[0] = '\0';
+    lastOdoStr[0] = '\0';
+    lastTripFuelStr[0] = '\0';
+    lastTelemVoltStr[0] = '\0';
+    lastTelemCltStr[0] = '\0';
+    lastTelemAfrStr[0] = '\0';
+    lastTelemTpsStr[0] = '\0';
+    lastTelemBoostStr[0] = '\0';
+    lastMBoostStr[0] = '\0';
+    lastMAdvStr[0] = '\0';
 }
 
 void UiEngine::init() {
@@ -144,6 +164,10 @@ void UiEngine::drawClassicClockScreen(bool fullRedraw) {
         lastHour = -1;
         lastMinute = -1;
         lastSecond = -1;
+        lastClockBoostStr[0] = '\0';
+        lastClockCltStr[0] = '\0';
+        lastClockAfrStr[0] = '\0';
+        lastGpsSats = -1;
     }
 
     // Мигание наклонного двоеточия раз в секунду (чистый белый)
@@ -178,31 +202,46 @@ void UiEngine::drawClassicClockScreen(bool fullRedraw) {
         lastSecond = td.second;
     }
 
-    // Обновление нижних значений телеметрии крупным жирным шрифтом FreeSansBoldOblique18pt7b
+    // Обновление нижних значений телеметрии (ТОЛЬКО ПРИ ИЗМЕНЕНИИ СТРОКИ ДЛЯ ИСКЛЮЧЕНИЯ МЕРЦАНИЯ)
     tft.setFont(&FreeSansBoldOblique18pt7b);
     tft.setTextColor(COLOR_WHITE);
 
     // 1. Наддув (BOOST)
-    tft.fillRect(18, 172, 98, 42, COLOR_BLACK);
-    tft.setCursor(18, 206);
+    char curBoostStr[16];
     if (sens.ms2Online) {
-        tft.printf("%+.2fb", sens.ms2.boost_bar);
+        snprintf(curBoostStr, sizeof(curBoostStr), "%+.2fb", sens.ms2.boost_bar);
     } else {
-        tft.print("0.00b");
+        snprintf(curBoostStr, sizeof(curBoostStr), "0.00b");
+    }
+    if (fullRedraw || strcmp(curBoostStr, lastClockBoostStr) != 0) {
+        strncpy(lastClockBoostStr, curBoostStr, sizeof(lastClockBoostStr));
+        tft.fillRect(18, 172, 98, 42, COLOR_BLACK);
+        tft.setCursor(18, 206);
+        tft.print(curBoostStr);
     }
 
     // 2. Температура ОЖ (COOLANT)
-    tft.fillRect(120, 172, 95, 42, COLOR_BLACK);
-    tft.setCursor(120, 206);
-    tft.printf("%+.0fC", sens.tempOutdoor);
+    char curCltStr[16];
+    snprintf(curCltStr, sizeof(curCltStr), "%+.0fC", sens.tempOutdoor);
+    if (fullRedraw || strcmp(curCltStr, lastClockCltStr) != 0) {
+        strncpy(lastClockCltStr, curCltStr, sizeof(lastClockCltStr));
+        tft.fillRect(120, 172, 95, 42, COLOR_BLACK);
+        tft.setCursor(120, 206);
+        tft.print(curCltStr);
+    }
 
     // 3. Смесь AFR / LAMBDA
-    tft.fillRect(220, 172, 98, 42, COLOR_BLACK);
-    tft.setCursor(220, 206);
+    char curAfrStr[16];
     if (sens.ms2Online) {
-        tft.printf("%.1f", sens.ms2.afr);
+        snprintf(curAfrStr, sizeof(curAfrStr), "%.1f", sens.ms2.afr);
     } else {
-        tft.printf("%.1fV", sens.batteryVoltage);
+        snprintf(curAfrStr, sizeof(curAfrStr), "%.1fV", sens.batteryVoltage);
+    }
+    if (fullRedraw || strcmp(curAfrStr, lastClockAfrStr) != 0) {
+        strncpy(lastClockAfrStr, curAfrStr, sizeof(lastClockAfrStr));
+        tft.fillRect(220, 172, 98, 42, COLOR_BLACK);
+        tft.setCursor(220, 206);
+        tft.print(curAfrStr);
     }
 
     tft.setFont(); // Сброс шрифта
@@ -242,76 +281,123 @@ void UiEngine::drawObcTripFuelScreen(bool fullRedraw) {
 
         tft.setCursor(168, 178);
         tft.print("TRIP FUEL:");
+
+        lastSpdStr[0] = '\0';
+        lastInstStr[0] = '\0';
+        lastTripDistStr[0] = '\0';
+        lastAvgFuelStr[0] = '\0';
+        lastOdoStr[0] = '\0';
+        lastTripFuelStr[0] = '\0';
+        lastFixDisplay = !gps.hasFix;
+        lastGpsSats = -1;
     }
 
-    // 1. СКОРОСТЬ GPS (Крупные жирные наклонные цифры)
-    char spdBuf[5];
+    // 1. СКОРОСТЬ GPS (Крупные жирные наклонные цифры) - только при изменении!
+    char spdBuf[8];
     int spd = (int)trip.current_speed_kmh;
     if (spd > 999) spd = 999;
     snprintf(spdBuf, sizeof(spdBuf), "%3d", spd);
 
-    // Отрисовка 3 цифр скорости (X = 14, 52, 90, Y = 18)
-    BmwAssets::drawSlantedBoldDigit(tft, 14, 18, spdBuf[0], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-    BmwAssets::drawSlantedBoldDigit(tft, 52, 18, spdBuf[1], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-    BmwAssets::drawSlantedBoldDigit(tft, 90, 18, spdBuf[2], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-
-    // Подпись KM/H
-    tft.setFont(&FreeSansBoldOblique9pt7b);
-    tft.setTextColor(COLOR_SILVER);
-    tft.setCursor(132, 40);
-    tft.print("KM/H");
-    if (!gps.hasFix) {
-        tft.setTextColor(COLOR_MID_GRAY);
-        tft.setCursor(130, 62);
-        tft.print("NO FIX");
-    } else {
-        tft.fillRect(130, 50, 42, 20, COLOR_BLACK);
+    if (fullRedraw || strcmp(spdBuf, lastSpdStr) != 0) {
+        strncpy(lastSpdStr, spdBuf, sizeof(lastSpdStr));
+        BmwAssets::drawSlantedBoldDigit(tft, 14, 18, spdBuf[0], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+        BmwAssets::drawSlantedBoldDigit(tft, 52, 18, spdBuf[1], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+        BmwAssets::drawSlantedBoldDigit(tft, 90, 18, spdBuf[2], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
     }
 
-    // 2. МГНОВЕННЫЙ РАСХОД (справа от спидометра, X = 170..252)
-    tft.fillRect(170, 14, 84, 68, COLOR_BLACK);
-    tft.setCursor(172, 32);
-    tft.setTextColor(COLOR_SILVER);
-    tft.setFont(&FreeSansBoldOblique9pt7b);
-    tft.print(trip.isLitersPerHour ? "INST. L/H:" : "INSTANT:");
-
-    tft.setFont(&FreeSansBoldOblique18pt7b);
-    tft.setTextColor(COLOR_WHITE);
-    tft.setCursor(172, 70);
-    tft.printf("%.1f", trip.instant_consumption);
-
-    if (!trip.isLitersPerHour) {
+    // Подпись KM/H и статус фиксации
+    if (fullRedraw || gps.hasFix != lastFixDisplay) {
+        lastFixDisplay = gps.hasFix;
         tft.setFont(&FreeSansBoldOblique9pt7b);
         tft.setTextColor(COLOR_SILVER);
-        tft.setCursor(224, 70);
-        tft.print("L");
+        tft.setCursor(132, 40);
+        tft.print("KM/H");
+        if (!gps.hasFix) {
+            tft.setTextColor(COLOR_MID_GRAY);
+            tft.setCursor(130, 62);
+            tft.print("NO FIX");
+        } else {
+            tft.fillRect(130, 50, 42, 20, COLOR_BLACK);
+        }
     }
 
-    // 3. КВАДРАНТ 1: Суточный пробег (Trip Distance) - крупным 18pt
-    tft.fillRect(16, 114, 138, 38, COLOR_BLACK);
-    tft.setFont(&FreeSansBoldOblique18pt7b);
-    tft.setTextColor(COLOR_WHITE);
-    tft.setCursor(16, 144);
-    tft.printf("%.1f km", trip.trip_distance_km);
+    // 2. МГНОВЕННЫЙ РАСХОД - только при изменении!
+    char curInstStr[16];
+    snprintf(curInstStr, sizeof(curInstStr), "%.1f %s", 
+             trip.instant_consumption, 
+             trip.isLitersPerHour ? "L/H" : "L");
+    if (fullRedraw || strcmp(curInstStr, lastInstStr) != 0) {
+        strncpy(lastInstStr, curInstStr, sizeof(lastInstStr));
+        tft.fillRect(170, 14, 84, 68, COLOR_BLACK);
+        tft.setCursor(172, 32);
+        tft.setTextColor(COLOR_SILVER);
+        tft.setFont(&FreeSansBoldOblique9pt7b);
+        tft.print(trip.isLitersPerHour ? "INST. L/H:" : "INSTANT:");
 
-    // 4. КВАДРАНТ 2: Средний расход (Avg Consumption) - крупным 18pt
-    tft.fillRect(168, 114, 148, 38, COLOR_BLACK);
-    tft.setCursor(168, 144);
+        tft.setFont(&FreeSansBoldOblique18pt7b);
+        tft.setTextColor(COLOR_WHITE);
+        tft.setCursor(172, 70);
+        tft.printf("%.1f", trip.instant_consumption);
+
+        if (!trip.isLitersPerHour) {
+            tft.setFont(&FreeSansBoldOblique9pt7b);
+            tft.setTextColor(COLOR_SILVER);
+            tft.setCursor(224, 70);
+            tft.print("L");
+        }
+    }
+
+    // 3. КВАДРАНТ 1: Суточный пробег - только при изменении!
+    char curTripDistStr[16];
+    snprintf(curTripDistStr, sizeof(curTripDistStr), "%.1f km", trip.trip_distance_km);
+    if (fullRedraw || strcmp(curTripDistStr, lastTripDistStr) != 0) {
+        strncpy(lastTripDistStr, curTripDistStr, sizeof(lastTripDistStr));
+        tft.fillRect(16, 114, 138, 38, COLOR_BLACK);
+        tft.setFont(&FreeSansBoldOblique18pt7b);
+        tft.setTextColor(COLOR_WHITE);
+        tft.setCursor(16, 144);
+        tft.print(curTripDistStr);
+    }
+
+    // 4. КВАДРАНТ 2: Средний расход - только при изменении!
+    char curAvgFuelStr[16];
     if (trip.trip_distance_km >= 0.1f) {
-        tft.printf("%.1f L", trip.avg_consumption_l_100km);
+        snprintf(curAvgFuelStr, sizeof(curAvgFuelStr), "%.1f L", trip.avg_consumption_l_100km);
     } else {
-        tft.print("--- L");
+        snprintf(curAvgFuelStr, sizeof(curAvgFuelStr), "--- L");
+    }
+    if (fullRedraw || strcmp(curAvgFuelStr, lastAvgFuelStr) != 0) {
+        strncpy(lastAvgFuelStr, curAvgFuelStr, sizeof(lastAvgFuelStr));
+        tft.fillRect(168, 114, 148, 38, COLOR_BLACK);
+        tft.setFont(&FreeSansBoldOblique18pt7b);
+        tft.setTextColor(COLOR_WHITE);
+        tft.setCursor(168, 144);
+        tft.print(curAvgFuelStr);
     }
 
-    // 5. КВАДРАНТ 3: Общий одометр (Total Odometer) - крупным 18pt
-    tft.fillRect(16, 186, 138, 38, COLOR_BLACK);
-    tft.setCursor(16, 216);
-    tft.printf("%.0f km", trip.total_odometer_km);
+    // 5. КВАДРАНТ 3: Общий одометр - только при изменении!
+    char curOdoStr[16];
+    snprintf(curOdoStr, sizeof(curOdoStr), "%.0f km", trip.total_odometer_km);
+    if (fullRedraw || strcmp(curOdoStr, lastOdoStr) != 0) {
+        strncpy(lastOdoStr, curOdoStr, sizeof(lastOdoStr));
+        tft.fillRect(16, 186, 138, 38, COLOR_BLACK);
+        tft.setFont(&FreeSansBoldOblique18pt7b);
+        tft.setTextColor(COLOR_WHITE);
+        tft.setCursor(16, 216);
+        tft.print(curOdoStr);
+    }
 
-    // 6. КВАДРАНТ 4: Израсходовано топлива за поездку - крупным 18pt
-    tft.fillRect(168, 186, 148, 38, COLOR_BLACK);
-    tft.setCursor(168, 216);
-    tft.printf("%.1f L", trip.trip_fuel_liters);
+    // 6. КВАДРАНТ 4: Топливо поездки - только при изменении!
+    char curTripFuelStr[16];
+    snprintf(curTripFuelStr, sizeof(curTripFuelStr), "%.1f L", trip.trip_fuel_liters);
+    if (fullRedraw || strcmp(curTripFuelStr, lastTripFuelStr) != 0) {
+        strncpy(lastTripFuelStr, curTripFuelStr, sizeof(lastTripFuelStr));
+        tft.fillRect(168, 186, 148, 38, COLOR_BLACK);
+        tft.setFont(&FreeSansBoldOblique18pt7b);
+        tft.setTextColor(COLOR_WHITE);
+        tft.setCursor(168, 216);
+        tft.print(curTripFuelStr);
+    }
 
     tft.setFont(); // Сброс шрифта
 
@@ -341,103 +427,141 @@ void UiEngine::drawObcTelemetryScreen(bool fullRedraw) {
         tft.setCursor(168, 24); tft.print("COOLANT");
         tft.setCursor(15, 104); tft.print("AIR / FUEL (AFR)");
         tft.setCursor(168, 104);tft.print("THROTTLE (TPS)");
+
+        lastTelemVoltStr[0] = '\0';
+        lastTelemCltStr[0] = '\0';
+        lastTelemAfrStr[0] = '\0';
+        lastTelemTpsStr[0] = '\0';
+        lastTelemBoostStr[0] = '\0';
+        lastTelemBoostW = -1;
+        lastGpsSats = -1;
     }
 
-    // 1. НАПРЯЖЕНИЕ АКБ (Верх-лево)
-    tft.fillRect(15, 30, 138, 50, COLOR_BLACK);
-    tft.setFont(&FreeSansBoldOblique18pt7b);
-    tft.setTextColor(COLOR_WHITE);
-    tft.setCursor(15, 56);
-    tft.printf("%.2fV", sens.batteryVoltage);
+    // 1. НАПРЯЖЕНИЕ АКБ (Верх-лево) - только при изменении!
+    char curVoltStr[16];
+    snprintf(curVoltStr, sizeof(curVoltStr), "%.2fV", sens.batteryVoltage);
+    if (fullRedraw || strcmp(curVoltStr, lastTelemVoltStr) != 0) {
+        strncpy(lastTelemVoltStr, curVoltStr, sizeof(lastTelemVoltStr));
+        tft.fillRect(15, 30, 138, 50, COLOR_BLACK);
+        tft.setFont(&FreeSansBoldOblique18pt7b);
+        tft.setTextColor(COLOR_WHITE);
+        tft.setCursor(15, 56);
+        tft.print(curVoltStr);
 
-    tft.setFont(&FreeSansBoldOblique9pt7b);
-    tft.setTextColor(COLOR_SILVER);
-    tft.setCursor(15, 74);
-    if (sens.voltStatus == VoltageStatus::VOLT_CRITICAL_LOW) {
-        tft.setTextColor(COLOR_STATUS_ERR);
-        tft.print("LOW BATTERY!");
-    } else if (sens.voltStatus == VoltageStatus::VOLT_NORMAL_RUNNING) {
-        tft.print("ALT: CHARGING");
-    } else {
-        tft.printf("CRK: %.1fV", sens.minCrankVoltage);
+        tft.setFont(&FreeSansBoldOblique9pt7b);
+        tft.setTextColor(COLOR_SILVER);
+        tft.setCursor(15, 74);
+        if (sens.voltStatus == VoltageStatus::VOLT_CRITICAL_LOW) {
+            tft.setTextColor(COLOR_STATUS_ERR);
+            tft.print("LOW BATTERY!");
+        } else if (sens.voltStatus == VoltageStatus::VOLT_NORMAL_RUNNING) {
+            tft.print("ALT: CHARGING");
+        } else {
+            tft.printf("CRK: %.1fV", sens.minCrankVoltage);
+        }
     }
 
-    // 2. ТЕМПЕРАТУРА ОЖ ДВС (Верх-право)
-    tft.fillRect(168, 30, 86, 50, COLOR_BLACK);
-    tft.setFont(&FreeSansBoldOblique18pt7b);
-    tft.setTextColor(COLOR_WHITE);
-    tft.setCursor(168, 56);
-    tft.printf("%+.0f C", sens.tempOutdoor);
+    // 2. ТЕМПЕРАТУРА ОЖ ДВС (Верх-право) - только при изменении!
+    char curCltStr[16];
+    snprintf(curCltStr, sizeof(curCltStr), "%+.0f C", sens.tempOutdoor);
+    if (fullRedraw || strcmp(curCltStr, lastTelemCltStr) != 0) {
+        strncpy(lastTelemCltStr, curCltStr, sizeof(lastTelemCltStr));
+        tft.fillRect(168, 30, 86, 50, COLOR_BLACK);
+        tft.setFont(&FreeSansBoldOblique18pt7b);
+        tft.setTextColor(COLOR_WHITE);
+        tft.setCursor(168, 56);
+        tft.print(curCltStr);
 
-    tft.setFont(&FreeSansBoldOblique9pt7b);
-    tft.setTextColor(COLOR_SILVER);
-    tft.setCursor(168, 74);
-    tft.printf("INTAKE: %+.0f C", sens.tempCabin);
+        tft.setFont(&FreeSansBoldOblique9pt7b);
+        tft.setTextColor(COLOR_SILVER);
+        tft.setCursor(168, 74);
+        tft.printf("INTAKE: %+.0f C", sens.tempCabin);
+    }
 
-    // 3. СМЕСЬ AFR / ЛЯМБДА (Низ-лево)
-    tft.fillRect(15, 110, 138, 50, COLOR_BLACK);
-    tft.setFont(&FreeSansBoldOblique18pt7b);
-    tft.setTextColor(COLOR_WHITE);
-    tft.setCursor(15, 136);
+    // 3. СМЕСЬ AFR / ЛЯМБДА (Низ-лево) - только при изменении!
+    char curAfrStr[16];
     if (sens.ms2Online) {
-        tft.printf("%.1f", sens.ms2.afr);
+        snprintf(curAfrStr, sizeof(curAfrStr), "%.1f", sens.ms2.afr);
     } else {
-        tft.print("--.-");
+        snprintf(curAfrStr, sizeof(curAfrStr), "--.-");
+    }
+    if (fullRedraw || strcmp(curAfrStr, lastTelemAfrStr) != 0) {
+        strncpy(lastTelemAfrStr, curAfrStr, sizeof(lastTelemAfrStr));
+        tft.fillRect(15, 110, 138, 50, COLOR_BLACK);
+        tft.setFont(&FreeSansBoldOblique18pt7b);
+        tft.setTextColor(COLOR_WHITE);
+        tft.setCursor(15, 136);
+        tft.print(curAfrStr);
+
+        tft.setFont(&FreeSansBoldOblique9pt7b);
+        tft.setTextColor(COLOR_SILVER);
+        tft.setCursor(15, 154);
+        if (sens.ms2Online) {
+            tft.printf("TARGET: %.1f", sens.ms2.afr_target);
+        } else {
+            tft.print("NO CAN DATA");
+        }
     }
 
-    tft.setFont(&FreeSansBoldOblique9pt7b);
-    tft.setTextColor(COLOR_SILVER);
-    tft.setCursor(15, 154);
+    // 4. ДРОССЕЛЬ TPS (Низ-право) - только при изменении!
+    char curTpsStr[16];
     if (sens.ms2Online) {
-        tft.printf("TARGET: %.1f", sens.ms2.afr_target);
+        snprintf(curTpsStr, sizeof(curTpsStr), "%.0f%%", sens.ms2.tps_pct);
     } else {
-        tft.print("NO CAN DATA");
+        snprintf(curTpsStr, sizeof(curTpsStr), "--%%");
+    }
+    if (fullRedraw || strcmp(curTpsStr, lastTelemTpsStr) != 0) {
+        strncpy(lastTelemTpsStr, curTpsStr, sizeof(lastTelemTpsStr));
+        tft.fillRect(168, 110, 140, 50, COLOR_BLACK);
+        tft.setFont(&FreeSansBoldOblique18pt7b);
+        tft.setTextColor(COLOR_WHITE);
+        tft.setCursor(168, 136);
+        tft.print(curTpsStr);
+
+        tft.setFont(&FreeSansBoldOblique9pt7b);
+        tft.setTextColor(COLOR_SILVER);
+        tft.setCursor(168, 154);
+        if (sens.ms2Online) {
+            tft.printf("MAP: %.0f kPa", sens.ms2.map_kpa);
+        } else {
+            tft.print("TPS NO CAN");
+        }
     }
 
-    // 4. ДРОССЕЛЬ TPS (Низ-право)
-    tft.fillRect(168, 110, 140, 50, COLOR_BLACK);
-    tft.setFont(&FreeSansBoldOblique18pt7b);
-    tft.setTextColor(COLOR_WHITE);
-    tft.setCursor(168, 136);
+    // 5. НИЖНЯЯ ШКАЛА НАДДУВА (BOOST / MAP BAR) - только при изменении!
+    char curBoostStr[32];
     if (sens.ms2Online) {
-        tft.printf("%.0f%%", sens.ms2.tps_pct);
+        snprintf(curBoostStr, sizeof(curBoostStr), "%+.2f Bar (%d kPa)", sens.ms2.boost_bar, (int)sens.ms2.map_kpa);
     } else {
-        tft.print("--%");
+        snprintf(curBoostStr, sizeof(curBoostStr), "0.00 Bar (100 kPa)");
     }
 
-    tft.setFont(&FreeSansBoldOblique9pt7b);
-    tft.setTextColor(COLOR_SILVER);
-    tft.setCursor(168, 154);
-    if (sens.ms2Online) {
-        tft.printf("MAP: %.0f kPa", sens.ms2.map_kpa);
-    } else {
-        tft.print("TPS NO CAN");
-    }
-
-    // 5. НИЖНЯЯ ШКАЛА НАДДУВА (BOOST / MAP BAR)
-    tft.fillRect(15, 170, 290, 62, COLOR_BLACK);
-
-    tft.setFont(&FreeSansBoldOblique9pt7b);
-    tft.setTextColor(COLOR_SILVER);
-    tft.setCursor(18, 188);
-    tft.print("BOOST:");
-
-    tft.setFont(&FreeSansBoldOblique12pt7b);
-    tft.setTextColor(COLOR_WHITE);
-    tft.setCursor(88, 188);
-    if (sens.ms2Online) {
-        tft.printf("%+.2f Bar (%d kPa)", sens.ms2.boost_bar, (int)sens.ms2.map_kpa);
-    } else {
-        tft.print("0.00 Bar (100 kPa)");
-    }
-
-    // Полоса наддува (-0.8 до +1.5 бар)
-    tft.drawRect(18, 198, 284, 20, COLOR_DARK_GRAY);
     float boostVal = sens.ms2Online ? sens.ms2.boost_bar : 0.0f;
     float clampedBoost = constrain(boostVal, -0.8f, 1.5f);
     int boostW = (int)((clampedBoost + 0.8f) / 2.3f * 280.0f);
-    if (boostW > 0) {
-        tft.fillRect(20, 200, boostW, 16, COLOR_WHITE);
+
+    if (fullRedraw || strcmp(curBoostStr, lastTelemBoostStr) != 0 || boostW != lastTelemBoostW) {
+        strncpy(lastTelemBoostStr, curBoostStr, sizeof(lastTelemBoostStr));
+        lastTelemBoostW = boostW;
+
+        tft.fillRect(15, 170, 290, 24, COLOR_BLACK);
+
+        tft.setFont(&FreeSansBoldOblique9pt7b);
+        tft.setTextColor(COLOR_SILVER);
+        tft.setCursor(18, 188);
+        tft.print("BOOST:");
+
+        tft.setFont(&FreeSansBoldOblique12pt7b);
+        tft.setTextColor(COLOR_WHITE);
+        tft.setCursor(88, 188);
+        tft.print(curBoostStr);
+
+        // Полоса наддува
+        tft.drawRect(18, 198, 284, 20, COLOR_DARK_GRAY);
+        tft.fillRect(20, 200, 280, 16, COLOR_BLACK);
+        if (boostW > 0) {
+            tft.fillRect(20, 200, boostW, 16, COLOR_WHITE);
+        }
     }
     tft.setFont();
 
@@ -474,18 +598,6 @@ void UiEngine::drawMPerformanceScreen(bool fullRedraw) {
         tft.print("BOOST");
         tft.setCursor(168, 168);
         tft.print("ADVANCE");
-        tft.setFont();
-    }
-
-    if (sens.ms2Online) {
-        // Отрисовка жирных наклонных цифр оборотов двигателя (drawSlantedBoldDigit)
-        char rpmBuf[6];
-        snprintf(rpmBuf, sizeof(rpmBuf), "%4d", sens.ms2.rpm);
-
-        BmwAssets::drawSlantedBoldDigit(tft, 18, 18, rpmBuf[0], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-        BmwAssets::drawSlantedBoldDigit(tft, 56, 18, rpmBuf[1], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-        BmwAssets::drawSlantedBoldDigit(tft, 94, 18, rpmBuf[2], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-        BmwAssets::drawSlantedBoldDigit(tft, 132, 18, rpmBuf[3], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
 
         // Подпись RPM жирным наклонным шрифтом
         tft.setFont(&FreeSansBoldOblique18pt7b);
@@ -493,27 +605,62 @@ void UiEngine::drawMPerformanceScreen(bool fullRedraw) {
         tft.setCursor(185, 60);
         tft.print("RPM");
 
-        // Прогрессивная полоса тахометра (Shift-Bar, 0 - 7500 RPM)
         tft.drawRect(18, 88, 284, 24, COLOR_DARK_GRAY);
+        tft.setFont();
+
+        lastRpmVal = -1;
+        lastShiftBarW = -1;
+        lastMBoostStr[0] = '\0';
+        lastMAdvStr[0] = '\0';
+        lastGpsSats = -1;
+    }
+
+    if (sens.ms2Online) {
+        // Отрисовка жирных наклонных цифр оборотов двигателя - только при изменении
+        if (fullRedraw || (sens.ms2.rpm / 20) != (lastRpmVal / 20)) {
+            lastRpmVal = sens.ms2.rpm;
+            char rpmBuf[6];
+            snprintf(rpmBuf, sizeof(rpmBuf), "%4d", sens.ms2.rpm);
+
+            BmwAssets::drawSlantedBoldDigit(tft, 18, 18, rpmBuf[0], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+            BmwAssets::drawSlantedBoldDigit(tft, 56, 18, rpmBuf[1], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+            BmwAssets::drawSlantedBoldDigit(tft, 94, 18, rpmBuf[2], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+            BmwAssets::drawSlantedBoldDigit(tft, 132, 18, rpmBuf[3], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+        }
+
+        // Прогрессивная полоса тахометра (Shift-Bar, 0 - 7500 RPM)
         int rpmW = map(constrain((int)sens.ms2.rpm, 0, 7500), 0, 7500, 0, 280);
-        
-        tft.fillRect(20, 90, 280, 20, COLOR_BLACK);
-        if (rpmW > 0) {
-            uint16_t barCol = (sens.ms2.rpm >= 6500) ? COLOR_BMW_M_RED : COLOR_WHITE;
-            tft.fillRect(20, 90, rpmW, 20, barCol);
+        if (fullRedraw || abs(rpmW - lastShiftBarW) >= 3) {
+            lastShiftBarW = rpmW;
+            tft.fillRect(20, 90, 280, 20, COLOR_BLACK);
+            if (rpmW > 0) {
+                uint16_t barCol = (sens.ms2.rpm >= 6500) ? COLOR_BMW_M_RED : COLOR_WHITE;
+                tft.fillRect(20, 90, rpmW, 20, barCol);
+            }
         }
 
         // Нижние спортивные показатели (Наддув, УОЗ) шрифтом 18pt
-        tft.setFont(&FreeSansBoldOblique18pt7b);
-        tft.setTextColor(COLOR_WHITE);
+        char curBoostStr[16];
+        snprintf(curBoostStr, sizeof(curBoostStr), "%+.2fb", sens.ms2.boost_bar);
+        if (fullRedraw || strcmp(curBoostStr, lastMBoostStr) != 0) {
+            strncpy(lastMBoostStr, curBoostStr, sizeof(lastMBoostStr));
+            tft.fillRect(20, 178, 136, 46, COLOR_BLACK);
+            tft.setFont(&FreeSansBoldOblique18pt7b);
+            tft.setTextColor(COLOR_WHITE);
+            tft.setCursor(20, 210);
+            tft.print(curBoostStr);
+        }
 
-        tft.fillRect(20, 178, 136, 46, COLOR_BLACK);
-        tft.setCursor(20, 210);
-        tft.printf("%+.2fb", sens.ms2.boost_bar);
-
-        tft.fillRect(168, 178, 136, 46, COLOR_BLACK);
-        tft.setCursor(168, 210);
-        tft.printf("%.1f*", sens.ms2.advance_deg);
+        char curAdvStr[16];
+        snprintf(curAdvStr, sizeof(curAdvStr), "%.1f*", sens.ms2.advance_deg);
+        if (fullRedraw || strcmp(curAdvStr, lastMAdvStr) != 0) {
+            strncpy(lastMAdvStr, curAdvStr, sizeof(lastMAdvStr));
+            tft.fillRect(168, 178, 136, 46, COLOR_BLACK);
+            tft.setFont(&FreeSansBoldOblique18pt7b);
+            tft.setTextColor(COLOR_WHITE);
+            tft.setCursor(168, 210);
+            tft.print(curAdvStr);
+        }
 
         tft.setFont(); // Сброс
 

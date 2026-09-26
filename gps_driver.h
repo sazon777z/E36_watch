@@ -45,8 +45,8 @@ private:
     unsigned long lastRtcSyncMillis;
 
     void parseSentence(char* sentence);
-    void parseRMC(char* s);
-    void parseGGA(char* s);
+    void parseRMC(char* f[], int count);
+    void parseGGA(char* f[], int count);
     bool verifyChecksum(const char* s);
     void syncRtcTime();
 };

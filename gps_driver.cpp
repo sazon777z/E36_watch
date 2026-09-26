@@ -91,26 +91,15 @@ void GpsDriver::parseSentence(char* sentence) {
 
     // Поддержка $GPRMC (GPS) и $GNRMC (GPS+ГЛОНАСС)
     if (strstr(fields[0], "RMC") != NULL) {
-        parseRMC(sentence);
+        parseRMC(fields, fCount);
     }
     // Поддержка $GPGGA и $GNGGA
     else if (strstr(fields[0], "GGA") != NULL) {
-        parseGGA(sentence);
+        parseGGA(fields, fCount);
     }
 }
 
-void GpsDriver::parseRMC(char* s) {
-    // Вновь разбиваем RMC для безопасного извлечения
-    char* f[24];
-    int count = 0;
-    f[count++] = s;
-    for (int i = 0; s[i] != '\0' && count < 24; i++) {
-        if (s[i] == ',' || s[i] == '*') {
-            s[i] = '\0';
-            f[count++] = &s[i + 1];
-        }
-    }
-
+void GpsDriver::parseRMC(char* f[], int count) {
     if (count < 10) return;
 
     // f[1]: Время UTC (hhmmss.sss)
@@ -150,18 +139,8 @@ void GpsDriver::parseRMC(char* s) {
     }
 }
 
-void GpsDriver::parseGGA(char* s) {
-    char* f[24];
-    int count = 0;
-    f[count++] = s;
-    for (int i = 0; s[i] != '\0' && count < 24; i++) {
-        if (s[i] == ',' || s[i] == '*') {
-            s[i] = '\0';
-            f[count++] = &s[i + 1];
-        }
-    }
-
-    if (count < 10) return;
+void GpsDriver::parseGGA(char* f[], int count) {
+    if (count < 8) return;
 
     // f[6]: Качество фиксации (1 = GPS fix, 2 = DGPS fix)
     int fixQuality = atoi(f[6]);
@@ -174,7 +153,7 @@ void GpsDriver::parseGGA(char* s) {
     data.satellites = (uint8_t)atoi(f[7]);
 
     // f[9]: Высота над уровнем моря (м)
-    if (strlen(f[9]) > 0) {
+    if (count > 9 && strlen(f[9]) > 0) {
         data.altitude_m = atof(f[9]);
     }
 }

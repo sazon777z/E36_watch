@@ -73,6 +73,31 @@ private:
     // Кеш спутников GPS
     int lastGpsSats;
     bool lastGpsFix;
+
+    // Кеш значений для полного устранения мерцания (dirty check)
+    char lastClockBoostStr[16];
+    char lastClockCltStr[16];
+    char lastClockAfrStr[16];
+
+    char lastSpdStr[8];
+    char lastInstStr[16];
+    char lastTripDistStr[16];
+    char lastAvgFuelStr[16];
+    char lastOdoStr[16];
+    char lastTripFuelStr[16];
+    bool lastFixDisplay;
+
+    char lastTelemVoltStr[16];
+    char lastTelemCltStr[16];
+    char lastTelemAfrStr[16];
+    char lastTelemTpsStr[16];
+    char lastTelemBoostStr[32];
+    int lastTelemBoostW;
+
+    int lastRpmVal;
+    int lastShiftBarW;
+    char lastMBoostStr[16];
+    char lastMAdvStr[16];
 };
 
 extern UiEngine UI;
