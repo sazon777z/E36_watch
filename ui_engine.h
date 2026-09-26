@@ -2,11 +2,19 @@
 #define UI_ENGINE_H
 
 #include <Arduino.h>
+#include <lvgl.h>
 #include "display_driver.h"
 #include "time_keeper.h"
 #include "sensors.h"
+#include "gps_driver.h"
+#include "trip_computer.h"
 #include "bmw_theme.h"
-#include "bmw_assets.h"
+
+// Объявления кастомных 4bpp сглаженных шрифтов
+extern "C" {
+    extern const lv_font_t lv_font_clock_70;
+    extern const lv_font_t lv_font_telemetry_24;
+}
 
 enum class ScreenId {
     BOOT_SPLASH = 0,
@@ -33,72 +41,91 @@ public:
     // Заставка загрузки
     void showBootSplash(const char* subtitle = "ON-BOARD COMPUTER");
 
-    // Секундомер / таймер M-Performance
-    void toggleStopwatch();
-    void resetStopwatch();
+    // Заглушки для совместимости
+    void toggleStopwatch() {}
+    void resetStopwatch() {}
 
 private:
     ScreenId currentScreen;
     ScreenId lastScreen;
-    bool needsFullRedraw;
-
-    // Кеш предыдущих значений для устранения мерцания
-    int lastHour;
-    int lastMinute;
-    int lastSecond;
-    int lastDay;
-    float lastVoltage;
-    float lastTemp;
-    bool lastBleState;
     bool colonState;
-    bool lastColonState;
     unsigned long lastColonBlinkMillis;
+    unsigned long lastTickMillis;
 
-    // Секундомер
-    bool stopwatchRunning;
-    unsigned long stopwatchStartMillis;
-    unsigned long stopwatchElapsedMillis;
+    // LVGL дисплейный буфер (320 x 40 строк в SRAM)
+    static const uint32_t LV_BUF_LINES = 40;
+    lv_disp_draw_buf_t draw_buf;
+    lv_color_t buf_1[320 * LV_BUF_LINES];
+    lv_disp_drv_t disp_drv;
 
-    // Отрисовка конкретных экранов
-    void drawClassicClockScreen(bool fullRedraw);
-    void drawObcTripFuelScreen(bool fullRedraw);
-    void drawObcTelemetryScreen(bool fullRedraw);
-    void drawMPerformanceScreen(bool fullRedraw);
-    void drawSettingsInfoScreen(bool fullRedraw);
+    // LVGL Экраны
+    lv_obj_t* scr_clock;
+    lv_obj_t* scr_trip;
+    lv_obj_t* scr_telem;
+    lv_obj_t* scr_m_perf;
+    lv_obj_t* scr_settings;
 
-    // Вспомогательные элементы
-    void drawGpsCornerIndicator(bool forceRedraw = false);
-    void drawHeader(const char* title, bool showStatusIcons = true);
-    void drawFooter(const char* leftText, const char* rightText);
+    // Виджеты Экрана 1: Часы и нижняя телеметрия
+    lv_obj_t* lbl_clock;
+    lv_obj_t* lbl_gps_sats_1;
+    lv_obj_t* lbl_boost_val;
+    lv_obj_t* lbl_clt_val;
+    lv_obj_t* lbl_afr_val;
 
-    // Кеш спутников GPS
-    int lastGpsSats;
-    bool lastGpsFix;
+    // Виджеты Экрана 2: Бортовой компьютер и расход
+    lv_obj_t* lbl_trip_spd;
+    lv_obj_t* lbl_trip_fix;
+    lv_obj_t* lbl_trip_inst;
+    lv_obj_t* lbl_trip_inst_lbl;
+    lv_obj_t* lbl_trip_dist;
+    lv_obj_t* lbl_trip_avg;
+    lv_obj_t* lbl_trip_odo;
+    lv_obj_t* lbl_trip_fuel;
+    lv_obj_t* lbl_gps_sats_2;
 
-    // Кеш значений для полного устранения мерцания (dirty check)
-    char lastClockBoostStr[16];
-    char lastClockCltStr[16];
-    char lastClockAfrStr[16];
+    // Виджеты Экрана 3: Телеметрия мотора
+    lv_obj_t* lbl_telem_volt;
+    lv_obj_t* lbl_telem_volt_sub;
+    lv_obj_t* lbl_telem_clt;
+    lv_obj_t* lbl_telem_clt_sub;
+    lv_obj_t* lbl_telem_afr;
+    lv_obj_t* lbl_telem_afr_sub;
+    lv_obj_t* lbl_telem_tps;
+    lv_obj_t* lbl_telem_tps_sub;
+    lv_obj_t* lbl_telem_boost_txt;
+    lv_obj_t* bar_telem_boost;
+    lv_obj_t* lbl_gps_sats_3;
 
-    char lastSpdStr[8];
-    char lastInstStr[16];
-    char lastTripDistStr[16];
-    char lastAvgFuelStr[16];
-    char lastOdoStr[16];
-    char lastTripFuelStr[16];
-    bool lastFixDisplay;
+    // Виджеты Экрана 4: ///M Тахометр
+    lv_obj_t* lbl_m_rpm;
+    lv_obj_t* bar_m_shift;
+    lv_obj_t* lbl_m_boost;
+    lv_obj_t* lbl_m_adv;
+    lv_obj_t* lbl_m_offline;
+    lv_obj_t* lbl_gps_sats_4;
 
-    char lastTelemVoltStr[16];
-    char lastTelemCltStr[16];
-    char lastTelemAfrStr[16];
-    char lastTelemTpsStr[16];
-    char lastTelemBoostStr[32];
-    int lastTelemBoostW;
+    // Виджеты Экрана 5: Настройки и инфо
+    lv_obj_t* lbl_set_ble;
+    lv_obj_t* lbl_set_can;
+    lv_obj_t* lbl_set_gps;
+    lv_obj_t* lbl_set_sys;
 
-    int lastRpmVal;
-    int lastShiftBarW;
-    char lastMBoostStr[16];
-    char lastMAdvStr[16];
+    // Создание экранов
+    void createScreenClock();
+    void createScreenTrip();
+    void createScreenTelem();
+    void createScreenMPerf();
+    void createScreenSettings();
+
+    // Обновление данных
+    void updateClockScreen();
+    void updateTripScreen();
+    void updateTelemScreen();
+    void updateMPerfScreen();
+    void updateSettingsScreen();
+
+    // Callback сброса буфера на экран ST7789
+    static void dispFlushCb(lv_disp_drv_t* disp_drv, const lv_area_t* area, lv_color_t* color_p);
 };
 
 extern UiEngine UI;

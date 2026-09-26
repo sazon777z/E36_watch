@@ -120,8 +120,8 @@ void loop() {
     // 5. Обновление системного времени
     Time.update();
 
-    // 6. Отрисовка графического интерфейса UI (каждые 50 мс, 20 FPS)
-    if (currentMillis - lastUiUpdate >= 50) {
+    // 6. Отрисовка графического интерфейса UI через LVGL (каждые 25 мс, 40 FPS)
+    if (currentMillis - lastUiUpdate >= 25) {
         lastUiUpdate = currentMillis;
         UI.update();
     }
