@@ -7,19 +7,21 @@
 // ЦВЕТОВАЯ ПАЛИТРА BMW E36 (RGB565)
 // =============================================================================
 
-// Фирменный янтарно-оранжевый BMW Amber (Classic OEM illumination)
-#define COLOR_BMW_AMBER_BRIGHT  0xFD20  // Яркий янтарный (акценты, важные цифры)
-#define COLOR_BMW_AMBER_MAIN    0xFB40  // Основной янтарный цвет приборки E36
-#define COLOR_BMW_AMBER_DIM     0x99C0  // Приглушенный янтарный (неактивные сегменты)
-#define COLOR_BMW_AMBER_GRID    0x2940  // Теневая сетка 7-сегментных индикаторов
-#define COLOR_BMW_AMBER_DARK    0x1880  // Едва заметный фон знакомест
+// Лаконичная монохромная палитра (Белый жирный на черном)
+#define COLOR_BLACK             0x0000  // Глубокий абсолютно черный фон
+#define COLOR_WHITE             0xFFFF  // Чистый белый (основные цифры и текст)
+#define COLOR_SILVER            0xC618  // Благородный серебристый (подписи, единицы измерения)
+#define COLOR_MID_GRAY          0x8410  // Нейтральный серый (второстепенные данные)
+#define COLOR_DARK_GRAY         0x2104  // Тонкие разделительные линии (1px)
+#define COLOR_GHOST_SEG         0x1082  // Едва заметная тень выключенных сегментов
 
-// Базовые контрастные цвета
-#define COLOR_BLACK             0x0000  // Глубокий черный фон
-#define COLOR_DARK_GRAY         0x2104  // Границы блоков / плашек
-#define COLOR_MID_GRAY          0x52AA  // Текст подсказок
-#define COLOR_LIGHT_GRAY        0x9CD3  // Второстепенные линии
-#define COLOR_WHITE             0xFFFF  // Чистый белый (логотип)
+// Фирменный янтарно-оранжевый BMW Amber (сохранен для совместимости)
+#define COLOR_BMW_AMBER_BRIGHT  0xFD20  // Яркий янтарный
+#define COLOR_BMW_AMBER_MAIN    0xFB40  // Основной янтарный цвет E36
+#define COLOR_BMW_AMBER_DIM     0x99C0  // Приглушенный янтарный
+#define COLOR_BMW_AMBER_GRID    0x1082  // Теневая сетка знакомест
+#define COLOR_BMW_AMBER_DARK    0x1082  // Фон знакомест
+#define COLOR_LIGHT_GRAY        0xC618  // Светло-серый
 
 // Спортивная палитра BMW M-Power (Триколор M-Tech)
 #define COLOR_BMW_M_CYAN        0x04DC  // Голубой (M Светло-синий)

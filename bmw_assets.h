@@ -190,6 +190,99 @@ public:
         tft.fillRect(x, y + sh + (vl / 2) - (dotSize / 2), dotSize, dotSize, col);
         tft.fillRect(x, y + sh * 2 + vl + (vl / 2) - (dotSize / 2), dotSize, dotSize, col);
     }
+
+    // =========================================================================
+    // ЛАКОНИЧНЫЙ ЖИРНЫЙ НАКЛОННЫЙ ЗНАКОГЕНЕРАТОР (BOLD SLANTED / ITALIC)
+    // =========================================================================
+    static void drawSlantedBoldDigit(Adafruit_ST7789& tft, int16_t x, int16_t y, char ch,
+                                     uint16_t activeColor, uint16_t ghostColor,
+                                     uint8_t size = 4, int8_t slant = 12) {
+        // Размеры сегментов (жирные пропорции)
+        int16_t sw = size * 5;      // Длина горизонтального сегмента
+        int16_t sh = size + 1;      // Увеличенная толщина для жирности (Bold)
+        int16_t vl = size * 6;      // Длина вертикального сегмента
+        int16_t totalH = sh * 3 + vl * 2; // Полная высота знакоместа
+
+        // Маска сегментов: 0bGFEDCBA
+        uint8_t mask = 0;
+        switch (ch) {
+            case '0': mask = 0b00111111; break;
+            case '1': mask = 0b00000110; break;
+            case '2': mask = 0b01011011; break;
+            case '3': mask = 0b01001111; break;
+            case '4': mask = 0b01100110; break;
+            case '5': mask = 0b01101101; break;
+            case '6': mask = 0b01111101; break;
+            case '7': mask = 0b00000111; break;
+            case '8': mask = 0b01111111; break;
+            case '9': mask = 0b01101111; break;
+            case '-': mask = 0b01000000; break;
+            case ' ': mask = 0b00000000; break;
+            case 'C': mask = 0b00111001; break;
+            case 'E': mask = 0b01111001; break;
+            case 'F': mask = 0b01110001; break;
+            case 'P': mask = 0b01110011; break;
+            case 'L': mask = 0b00111000; break;
+            case 'U': mask = 0b00111110; break;
+            case 'b': mask = 0b01111100; break;
+            case 'd': mask = 0b01011110; break;
+            default:  mask = 0; break;
+        }
+
+        // Лямбда быстрой построчной отрисовки сегмента с динамическим наклоном
+        auto drawSlantedBlock = [&](int16_t x_rel, int16_t y_rel, int16_t w, int16_t h, uint16_t col) {
+            for (int16_t dy = 0; dy < h; dy++) {
+                int16_t curY = y + y_rel + dy;
+                // Наклон вправо вверху (курсив):
+                int16_t dx = (int16_t)(((totalH - 1 - (y_rel + dy)) * slant) / totalH);
+                tft.drawFastHLine(x + x_rel + dx, curY, w, col);
+            }
+        };
+
+        // Сегмент A (верх)
+        drawSlantedBlock(sh, 0, sw, sh, (mask & 0x01) ? activeColor : ghostColor);
+
+        // Сегмент B (верх-право)
+        drawSlantedBlock(sh + sw, sh, sh, vl, (mask & 0x02) ? activeColor : ghostColor);
+
+        // Сегмент C (низ-право)
+        drawSlantedBlock(sh + sw, sh * 2 + vl, sh, vl, (mask & 0x04) ? activeColor : ghostColor);
+
+        // Сегмент D (низ)
+        drawSlantedBlock(sh, (sh + vl) * 2, sw, sh, (mask & 0x08) ? activeColor : ghostColor);
+
+        // Сегмент E (низ-лево)
+        drawSlantedBlock(0, sh * 2 + vl, sh, vl, (mask & 0x10) ? activeColor : ghostColor);
+
+        // Сегмент F (верх-лево)
+        drawSlantedBlock(0, sh, sh, vl, (mask & 0x20) ? activeColor : ghostColor);
+
+        // Сегмент G (середина)
+        drawSlantedBlock(sh, sh + vl, sw, sh, (mask & 0x40) ? activeColor : ghostColor);
+    }
+
+    // Наклонное жирное двоеточие
+    static void drawSlantedColon(Adafruit_ST7789& tft, int16_t x, int16_t y, bool visible,
+                                 uint16_t activeColor, uint16_t ghostColor,
+                                 uint8_t size = 4, int8_t slant = 12) {
+        int16_t dotSize = size * 2;
+        int16_t sh = size + 1;
+        int16_t vl = size * 6;
+        int16_t totalH = sh * 3 + vl * 2;
+
+        uint16_t col = visible ? activeColor : ghostColor;
+
+        auto drawSlantedDot = [&](int16_t y_rel) {
+            for (int16_t dy = 0; dy < dotSize; dy++) {
+                int16_t curY = y + y_rel + dy;
+                int16_t dx = (int16_t)(((totalH - 1 - (y_rel + dy)) * slant) / totalH);
+                tft.drawFastHLine(x + dx, curY, dotSize, col);
+            }
+        };
+
+        drawSlantedDot(sh + (vl / 2) - (dotSize / 2));
+        drawSlantedDot(sh * 2 + vl + (vl / 2) - (dotSize / 2));
+    }
 };
 
 #endif // BMW_ASSETS_H
