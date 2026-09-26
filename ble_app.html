@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>BMW E36 OBC & MegaSquirt 2 BLE</title>
+    <style>
+        :root {
+            --bg-color: #000000;
+            --card-bg: #0d0d0d;
+            --border-color: #222222;
+            --text-white: #ffffff;
+            --text-silver: #a0a0a0;
+            --text-dim: #555555;
+            --accent-blue: #0066ff;
+            --accent-red: #ff2222;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-white);
+            font-family: var(--font-family);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        header {
+            text-align: center;
+            padding: 12px 0 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 800;
+            font-style: italic;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .sub-header {
+            font-size: 11px;
+            color: var(--text-silver);
+            letter-spacing: 2px;
+            margin-top: 4px;
+            text-transform: uppercase;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            font-style: italic;
+            padding: 4px 10px;
+            border-radius: 4px;
+            background: #151515;
+            border: 1px solid #333;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #555;
+        }
+
+        .dot.connected {
+            background-color: #00ff66;
+            box-shadow: 0 0 8px #00ff66;
+        }
+
+        .btn {
+            background: #1a1a1a;
+            color: var(--text-white);
+            border: 1px solid #3a3a3a;
+            padding: 14px 18px;
+            font-size: 14px;
+            font-weight: 700;
+            font-style: italic;
+            text-transform: uppercase;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: #252525;
+            border-color: #666;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-primary {
+            background: var(--text-white);
+            color: #000;
+            border: 1px solid #fff;
+        }
+
+        .btn-primary:hover {
+            background: #e0e0e0;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+
+        .tele-card {
+            background: #080808;
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .tele-label {
+            font-size: 10px;
+            font-weight: 700;
+            font-style: italic;
+            color: var(--text-silver);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .tele-val {
+            font-size: 22px;
+            font-weight: 800;
+            font-style: italic;
+            margin-top: 4px;
+            color: var(--text-white);
+        }
+
+        .range-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            background: #222;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: var(--text-white);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .btn-group-screens {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .btn-screen {
+            background: #111;
+            color: var(--text-silver);
+            border: 1px solid #282828;
+            padding: 10px 4px;
+            font-size: 10px;
+            font-weight: 700;
+            font-style: italic;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .btn-screen:active {
+            background: #222;
+            color: #fff;
+        }
+
+        .log-box {
+            background: #050505;
+            border: 1px solid #1a1a1a;
+            border-radius: 4px;
+            padding: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #888;
+            max-height: 80px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>BMW E36 DIGITAL</h1>
+            <div class="sub-header">Megasquirt 2 CAN &bull; Bluetooth LE</div>
+        </header>
+
+        <!-- Статус и Подключение -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic;">СТАТУС BLE:</span>
+                <div class="status-badge">
+                    <div class="dot" id="bleDot"></div>
+                    <span id="bleStatusText">ОТКЛЮЧЕНО</span>
+                </div>
+            </div>
+            <button class="btn btn-primary" id="btnConnect" onclick="toggleConnect()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M7 7l10 10-5 5V2l5 5L7 17"></path>
+                </svg>
+                Подключиться к BMW E36
+            </button>
+        </div>
+
+        <!-- Синхронизация времени -->
+        <div class="card">
+            <div style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic; margin-bottom: 8px;">ВРЕМЯ И СИНХРОНИЗАЦИЯ:</div>
+            <button class="btn" onclick="syncExactTime()">
+                🕒 Синхронизировать с телефоном
+            </button>
+        </div>
+
+        <!-- Живая телеметрия MegaSquirt 2 -->
+        <div class="card">
+            <div style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic; margin-bottom: 10px;">ТЕЛЕМЕТРИЯ MEGASQUIRT 2:</div>
+            <div class="grid-3">
+                <div class="tele-card">
+                    <div class="tele-label">RPM</div>
+                    <div class="tele-val" id="valRpm">---</div>
+                </div>
+                <div class="tele-card">
+                    <div class="tele-label">BOOST</div>
+                    <div class="tele-val" id="valBoost">---</div>
+                </div>
+                <div class="tele-card">
+                    <div class="tele-label">COOLANT</div>
+                    <div class="tele-val" id="valClt">---</div>
+                </div>
+            </div>
+            <div class="grid-2" style="margin-top: 10px;">
+                <div class="tele-card">
+                    <div class="tele-label">AFR / LAMBDA</div>
+                    <div class="tele-val" id="valAfr">---</div>
+                </div>
+                <div class="tele-card">
+                    <div class="tele-label">BATTERY</div>
+                    <div class="tele-val" id="valVolt">---</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Управление дисплеем -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic;">
+                <span>ЯРКОСТЬ ПОДСВЕТКИ:</span>
+                <span id="lblBright">220</span>
+            </div>
+            <div class="range-wrapper">
+                <input type="range" id="rngBright" min="10" max="255" value="220" oninput="onBrightChange(this.value)">
+            </div>
+
+            <div style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic; margin-top: 16px;">ПЕРЕКЛЮЧИТЬ ЭКРАН:</div>
+            <div class="btn-group-screens">
+                <button class="btn-screen" onclick="sendCmd('screen 1')">ЧАСЫ</button>
+                <button class="btn-screen" onclick="sendCmd('screen 2')">МОТОР</button>
+                <button class="btn-screen" onclick="sendCmd('screen 3')">ТАХОМЕТР</button>
+                <button class="btn-screen" onclick="sendCmd('screen 4')">ИНФО</button>
+            </div>
+        </div>
+
+        <!-- Консоль логов -->
+        <div class="log-box" id="logBox">Готов к подключению через Web Bluetooth (Chrome / Edge)...</div>
+    </div>
+
+    <script>
+        const NUS_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+        const NUS_RX_CHAR_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+        const NUS_TX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+
+        let bleDevice = null;
+        let rxChar = null;
+        let txChar = null;
+
+        function log(msg) {
+            const el = document.getElementById('logBox');
+            el.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + el.textContent.slice(0, 300);
+        }
+
+        async function toggleConnect() {
+            if (bleDevice && bleDevice.gatt.connected) {
+                bleDevice.gatt.disconnect();
+                return;
+            }
+
+            try {
+                log('Поиск устройства BMW-E36-OBC...');
+                bleDevice = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: 'BMW-E36-OBC' }],
+                    optionalServices: [NUS_SERVICE_UUID]
+                });
+
+                bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+                log('Подключение к GATT серверу...');
+                const server = await bleDevice.gatt.connect();
+
+                log('Получение Nordic UART сервиса...');
+                const service = await server.getPrimaryService(NUS_SERVICE_UUID);
+
+                rxChar = await service.getCharacteristic(NUS_RX_CHAR_UUID);
+                txChar = await service.getCharacteristic(NUS_TX_CHAR_UUID);
+
+                await txChar.startNotifications();
+                txChar.addEventListener('characteristicvaluechanged', onNotify);
+
+                setConnectedUI(true);
+                log('Подключено к BMW E36!');
+
+                // Запрос текущего статуса
+                sendCmd('status');
+            } catch (err) {
+                log('Ошибка: ' + err.message);
+                setConnectedUI(false);
+            }
+        }
+
+        function onDisconnected() {
+            log('Связь разорвана.');
+            setConnectedUI(false);
+        }
+
+        function setConnectedUI(connected) {
+            const dot = document.getElementById('bleDot');
+            const txt = document.getElementById('bleStatusText');
+            const btn = document.getElementById('btnConnect');
+
+            if (connected) {
+                dot.classList.add('connected');
+                txt.textContent = 'ПОДКЛЮЧЕНО';
+                btn.textContent = 'Отключиться';
+            } else {
+                dot.classList.remove('connected');
+                txt.textContent = 'ОТКЛЮЧЕНО';
+                btn.textContent = 'Подключиться к BMW E36';
+            }
+        }
+
+        async function sendCmd(cmd) {
+            if (!rxChar) return;
+            try {
+                const enc = new TextEncoder();
+                await rxChar.writeValue(enc.encode(cmd + '\n'));
+                log('> ' + cmd);
+            } catch (err) {
+                log('Ошибка отправки: ' + err.message);
+            }
+        }
+
+        function onNotify(event) {
+            const dec = new TextDecoder();
+            const text = dec.decode(event.target.value).trim();
+
+            if (text.startsWith('{') && text.endsWith('}')) {
+                try {
+                    const data = JSON.parse(text);
+                    if (data.rpm !== undefined) document.getElementById('valRpm').textContent = data.rpm;
+                    if (data.boost !== undefined) document.getElementById('valBoost').textContent = (data.boost >= 0 ? '+' : '') + data.boost.toFixed(2) + 'b';
+                    if (data.clt !== undefined) document.getElementById('valClt').textContent = Math.round(data.clt) + '°C';
+                    if (data.afr !== undefined) document.getElementById('valAfr').textContent = data.afr.toFixed(1);
+                    if (data.volt !== undefined) document.getElementById('valVolt').textContent = data.volt.toFixed(1) + 'V';
+                } catch (e) {}
+            } else {
+                log('< ' + text);
+            }
+        }
+
+        function syncExactTime() {
+            const now = new Date();
+            const epoch = Math.floor(now.getTime() / 1000);
+            sendCmd(`epoch ${epoch}`);
+        }
+
+        let brightTimer = null;
+        function onBrightChange(val) {
+            document.getElementById('lblBright').textContent = val;
+            clearTimeout(brightTimer);
+            brightTimer = setTimeout(() => {
+                sendCmd(`bright ${val}`);
+            }, 100);
+        }
+    </script>
+</body>
+</html>

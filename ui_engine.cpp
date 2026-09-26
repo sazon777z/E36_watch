@@ -1,5 +1,5 @@
 #include "ui_engine.h"
-#include <WiFi.h>
+#include "ble_manager.h"
 #include <Fonts/FreeSansBoldOblique9pt7b.h>
 #include <Fonts/FreeSansBoldOblique12pt7b.h>
 #include <Fonts/FreeSansBoldOblique18pt7b.h>
@@ -16,7 +16,7 @@ UiEngine::UiEngine()
       lastDay(-1),
       lastVoltage(-1.0f),
       lastTemp(-99.0f),
-      lastWifiState(false),
+      lastBleState(false),
       colonState(true),
       lastColonBlinkMillis(0),
       stopwatchRunning(false),
@@ -48,28 +48,28 @@ void UiEngine::showBootSplash(const char* subtitle) {
     Display.setBrightness(0);
     tft.fillScreen(COLOR_BLACK);
 
-    // Отрисовка фирменного логотипа BMW в центре
-    BmwAssets::drawRoundel(tft, 160, 80, 40);
-
-    // Лаконичный наклонный заголовок
-    tft.setFont(&FreeSansBoldOblique12pt7b);
+    // Лаконичная заставка Megasquirt 2 без лишних графических логотипов
+    tft.setFont(&FreeSansBoldOblique18pt7b);
     tft.setTextColor(COLOR_WHITE);
-    tft.setCursor(65, 155);
-    tft.print("BMW BAVARIA");
+    tft.setCursor(48, 105);
+    tft.print("Megasquirt 2");
+
+    // Тонкая разделительная линия
+    tft.drawFastHLine(48, 120, 224, COLOR_DARK_GRAY);
 
     tft.setFont(&FreeSansBoldOblique9pt7b);
     tft.setTextColor(COLOR_SILVER);
-    tft.setCursor(55, 185);
-    tft.print(subtitle);
+    tft.setCursor(68, 145);
+    tft.print("CAN-BUS TELEMETRY");
 
     tft.setFont(); // Сброс шрифта на стандартный
     tft.setTextColor(COLOR_MID_GRAY);
-    tft.setCursor(115, 215);
-    tft.print("E36 OBC v2.0");
+    tft.setCursor(110, 210);
+    tft.print("E36 OBC v2.1 BLE");
 
     // Плавный розжиг подсветки
-    Display.fadeIn(DEFAULT_BRIGHTNESS, 5);
-    delay(1600);
+    Display.fadeIn(DEFAULT_BRIGHTNESS, 4);
+    delay(800);
     Display.fadeOut(3);
     
     tft.fillScreen(COLOR_BLACK);
@@ -110,9 +110,9 @@ void UiEngine::drawHeader(const char* title, bool showStatusIcons) {
         tft.setCursor(236, 7);
         tft.printf("%+.0fC", sens.tempOutdoor);
 
-        // Статус Wi-Fi
-        bool wifiOk = (WiFi.status() == WL_CONNECTED);
-        BmwAssets::drawWifi(tft, 296, 5, wifiOk ? COLOR_WHITE : COLOR_MID_GRAY, wifiOk);
+        // Статус Bluetooth Low Energy (BLE)
+        bool bleOk = BleMgr.isConnected();
+        BmwAssets::drawBluetooth(tft, 298, 4, COLOR_WHITE, bleOk);
     }
 
     // Заголовок по центру
@@ -154,17 +154,17 @@ void UiEngine::drawClassicClockScreen(bool fullRedraw) {
         tft.fillScreen(COLOR_BLACK);
         drawHeader("BMW E36 DIGITAL", true);
 
-        // Тонкая разделительная линия под датой
-        tft.drawFastHLine(15, 160, 290, COLOR_DARK_GRAY);
+        // Тонкая разделительная линия перед блоками телеметрии
+        tft.drawFastHLine(15, 158, 290, COLOR_DARK_GRAY);
 
-        // Подписи нижних блоков телеметрии
+        // Подписи нижних блоков телеметрии (жирный наклонный)
         tft.setFont(&FreeSansBoldOblique9pt7b);
         tft.setTextColor(COLOR_SILVER);
-        tft.setCursor(18, 180);
+        tft.setCursor(20, 180);
         tft.print("BOOST");
         tft.setCursor(120, 180);
         tft.print("COOLANT");
-        tft.setCursor(222, 180);
+        tft.setCursor(220, 180);
         tft.print("LAMBDA");
 
         drawFooter("E36 DIGITAL CLOCK", "BMW MOTORSPORT");
@@ -172,18 +172,17 @@ void UiEngine::drawClassicClockScreen(bool fullRedraw) {
         lastHour = -1;
         lastMinute = -1;
         lastSecond = -1;
-        lastDay = -1;
     }
 
     // Мигание наклонного двоеточия раз в секунду (чистый белый)
     if (millis() - lastColonBlinkMillis >= 500) {
         colonState = !colonState;
         lastColonBlinkMillis = millis();
-        BmwAssets::drawSlantedColon(tft, 96, 44, colonState, COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-        BmwAssets::drawSlantedColon(tft, 192, 54, colonState, COLOR_WHITE, COLOR_GHOST_SEG, 3, 9);
+        BmwAssets::drawSlantedColon(tft, 98, 56, colonState, COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+        BmwAssets::drawSlantedColon(tft, 194, 66, colonState, COLOR_WHITE, COLOR_GHOST_SEG, 3, 9);
     }
 
-    // Отрисовка жирных наклонных белых цифр времени
+    // Отрисовка жирных наклонных белых цифр времени (центрированы по высоте)
     if (fullRedraw || td.hour != lastHour || td.minute != lastMinute || td.second != lastSecond) {
         char hBuf[3], mBuf[3], sBuf[3];
         snprintf(hBuf, sizeof(hBuf), "%02d", td.hour);
@@ -191,61 +190,43 @@ void UiEngine::drawClassicClockScreen(bool fullRedraw) {
         snprintf(sBuf, sizeof(sBuf), "%02d", td.second);
 
         // ЧАСЫ (размер 4, наклон 12px, чистый белый цвет)
-        BmwAssets::drawSlantedBoldDigit(tft, 18, 44, hBuf[0], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-        BmwAssets::drawSlantedBoldDigit(tft, 56, 44, hBuf[1], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+        BmwAssets::drawSlantedBoldDigit(tft, 20, 56, hBuf[0], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+        BmwAssets::drawSlantedBoldDigit(tft, 58, 56, hBuf[1], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
 
         // МИНУТЫ (размер 4, наклон 12px, чистый белый цвет)
-        BmwAssets::drawSlantedBoldDigit(tft, 116, 44, mBuf[0], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
-        BmwAssets::drawSlantedBoldDigit(tft, 154, 44, mBuf[1], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+        BmwAssets::drawSlantedBoldDigit(tft, 118, 56, mBuf[0], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
+        BmwAssets::drawSlantedBoldDigit(tft, 156, 56, mBuf[1], COLOR_WHITE, COLOR_GHOST_SEG, 4, 12);
 
         // СЕКУНДЫ (размер 3, наклон 9px, серебристо-белый цвет)
-        BmwAssets::drawSlantedBoldDigit(tft, 208, 54, sBuf[0], COLOR_SILVER, COLOR_GHOST_SEG, 3, 9);
-        BmwAssets::drawSlantedBoldDigit(tft, 236, 54, sBuf[1], COLOR_SILVER, COLOR_GHOST_SEG, 3, 9);
+        BmwAssets::drawSlantedBoldDigit(tft, 210, 66, sBuf[0], COLOR_SILVER, COLOR_GHOST_SEG, 3, 9);
+        BmwAssets::drawSlantedBoldDigit(tft, 238, 66, sBuf[1], COLOR_SILVER, COLOR_GHOST_SEG, 3, 9);
 
         lastHour = td.hour;
         lastMinute = td.minute;
         lastSecond = td.second;
     }
 
-    // Отрисовка даты и дня недели наклонным шрифтом FreeSansBoldOblique
-    if (fullRedraw || td.day != lastDay) {
-        tft.fillRect(15, 126, 290, 30, COLOR_BLACK);
-
-        tft.setFont(&FreeSansBoldOblique12pt7b);
-        tft.setTextColor(COLOR_WHITE);
-        tft.setCursor(20, 150);
-        tft.print(td.dateStr);
-
-        tft.setFont(&FreeSansBoldOblique9pt7b);
-        tft.setTextColor(COLOR_SILVER);
-        tft.setCursor(180, 149);
-        tft.print(td.dayOfWeekStrEn);
-
-        tft.setFont(); // Сброс шрифта на стандартный
-        lastDay = td.day;
-    }
-
     // Обновление нижних значений телеметрии (жирные белые цифры)
     tft.setFont(&FreeSansBoldOblique12pt7b);
     tft.setTextColor(COLOR_WHITE);
 
-    // 1. Наддув
-    tft.fillRect(18, 186, 92, 22, COLOR_BLACK);
-    tft.setCursor(18, 204);
+    // 1. Наддув (BOOST)
+    tft.fillRect(20, 186, 90, 24, COLOR_BLACK);
+    tft.setCursor(20, 205);
     if (sens.ms2Online) {
         tft.printf("%+.2fb", sens.ms2.boost_bar);
     } else {
         tft.print("0.00b");
     }
 
-    // 2. Температура ОЖ
-    tft.fillRect(120, 186, 85, 22, COLOR_BLACK);
-    tft.setCursor(120, 204);
+    // 2. Температура ОЖ (COOLANT)
+    tft.fillRect(120, 186, 85, 24, COLOR_BLACK);
+    tft.setCursor(120, 205);
     tft.printf("%+.0fC", sens.tempOutdoor);
 
-    // 3. Смесь AFR
-    tft.fillRect(222, 186, 85, 22, COLOR_BLACK);
-    tft.setCursor(222, 204);
+    // 3. Смесь AFR / LAMBDA
+    tft.fillRect(220, 186, 90, 24, COLOR_BLACK);
+    tft.setCursor(220, 205);
     if (sens.ms2Online) {
         tft.printf("%.1f", sens.ms2.afr);
     } else {
@@ -532,23 +513,25 @@ void UiEngine::drawSettingsInfoScreen(bool fullRedraw) {
             tft.print("OFFLINE (NO CAN)");
         }
 
-        // Блок Wi-Fi точки
+        // Блок Bluetooth Low Energy (BLE)
         tft.setFont(&FreeSansBoldOblique9pt7b);
         tft.setTextColor(COLOR_SILVER);
-        tft.setCursor(18, 116);
-        tft.print("WIFI AP CONTROL:");
+        tft.setCursor(18, 114);
+        tft.print("BLUETOOTH LE (BLE):");
 
-        tft.setFont(); // Растровый для четких IP и паролей
+        tft.setFont(); // Растровый для четких символов
         tft.setTextColor(COLOR_WHITE);
         tft.setTextSize(1);
         tft.setCursor(18, 126);
-        tft.printf("SSID: %s  |  Pass: %s", AP_SSID, AP_PASSWORD);
+        tft.printf("Device: %s  |  Status: %s", 
+                   BleMgr.getDeviceName(), 
+                   BleMgr.isConnected() ? "[CONNECTED]" : "[ADVERTISING]");
 
         tft.setCursor(18, 142);
-        tft.print("URL:  http://192.168.4.1");
+        tft.printf("MAC:    %s", BleMgr.getMacAddress().c_str());
 
         tft.setCursor(18, 156);
-        tft.printf("CAN:  TX: GPIO %d, RX: GPIO %d (500k)", PIN_CAN_TX, PIN_CAN_RX);
+        tft.printf("CAN:    TX: GPIO %d, RX: GPIO %d (500k)", PIN_CAN_TX, PIN_CAN_RX);
 
         // Системные данные
         tft.setTextColor(COLOR_SILVER);
@@ -556,7 +539,7 @@ void UiEngine::drawSettingsInfoScreen(bool fullRedraw) {
         tft.printf("Free Heap: %d KB  |  Brightness: %d/255", ESP.getFreeHeap() / 1024, Display.getBrightness());
 
         tft.setCursor(18, 196);
-        tft.printf("NTP Server: %s", NTP_SERVER_1);
+        tft.printf("App:    Web Bluetooth (ble_app.html) / NUS App");
 
         drawFooter("CLICK: NEXT SCREEN", "BMW E36 1991");
     }

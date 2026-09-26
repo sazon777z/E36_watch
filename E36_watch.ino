@@ -33,12 +33,11 @@
 #include "time_keeper.h"
 #include "sensors.h"
 #include "ui_engine.h"
-#include "web_portal.h"
+#include "ble_manager.h"
 
 // Тайминги выполнения задач
 unsigned long lastSensorUpdate = 0;
 unsigned long lastUiUpdate = 0;
-unsigned long lastNtpCheck = 0;
 
 void setup() {
     Serial.begin(115200);
@@ -59,27 +58,26 @@ void setup() {
         Serial.println("[OK] CAN-шина MegaSquirt 2 (500 kbps) запущена.");
     }
 
-    // 3. Отображение фирменной заставки BMW
-    UI.showBootSplash("ON-BOARD COMPUTER");
+    // 3. Отображение фирменной заставки Megasquirt 2
+    UI.showBootSplash("CAN-BUS TELEMETRY");
 
-    // 4. Инициализация часов, сенсоров и веб-портала
+    // 4. Инициализация часов, сенсоров, UI и Bluetooth Low Energy
     Time.init();
     Sensors.init();
     UI.init();
-    Portal.init();
+    BleMgr.init();
 
-    Serial.println("[OK] Точка доступа Wi-Fi запущена: " AP_SSID);
-    Serial.println("[OK] Веб-интерфейс доступен по адресу: http://192.168.4.1");
+    Serial.println("[OK] Система готова к работе.");
 }
 
 void loop() {
     // 1. Постоянный неблокирующий прием пакетов CAN-шины MegaSquirt 2
     CanBus.update();
 
-    unsigned long currentMillis = millis();
+    // 2. Обслуживание Bluetooth Low Energy (NUS сервис)
+    BleMgr.update();
 
-    // 2. Обслуживание веб-сервера настроек со смартфона
-    Portal.update();
+    unsigned long currentMillis = millis();
 
     // 3. Периодический опрос датчиков и АЦП бортсети (каждые 100 мс)
     if (currentMillis - lastSensorUpdate >= 100) {
@@ -94,7 +92,7 @@ void loop() {
         }
     }
 
-    // 3. Обработка нажатий физической кнопки
+    // 4. Обработка нажатий физической кнопки
     if (Sensors.isNextButtonPressed()) {
         if (UI.getCurrentScreen() == ScreenId::M_PERFORMANCE) {
             UI.toggleStopwatch(); // В спортивном режиме короткий клик запускает/останавливает таймер
@@ -111,21 +109,15 @@ void loop() {
         }
     }
 
-    // 4. Обновление системного времени
+    // 5. Обновление системного времени
     Time.update();
 
-    // 5. Отрисовка графического интерфейса UI (каждые 50 мс, 20 FPS)
+    // 6. Отрисовка графического интерфейса UI (каждые 50 мс, 20 FPS)
     if (currentMillis - lastUiUpdate >= 50) {
         lastUiUpdate = currentMillis;
         UI.update();
     }
 
-    // 6. Периодическая проверка синхронизации времени по Wi-Fi (раз в час)
-    if (Portal.isConnectedToStation() && (currentMillis - lastNtpCheck >= (NTP_SYNC_INTERVAL_SEC * 1000UL))) {
-        lastNtpCheck = currentMillis;
-        Time.syncNtp(DEFAULT_TIMEZONE_OFFSET, 0);
-    }
-
-    // Небольшая уступка квантов времени для FreeRTOS и Wi-Fi стека ESP32
+    // Небольшая уступка квантов времени для FreeRTOS и BLE стека ESP32
     yield();
 }

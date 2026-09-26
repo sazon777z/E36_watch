@@ -48,7 +48,7 @@ private:
     int lastDay;
     float lastVoltage;
     float lastTemp;
-    bool lastWifiState;
+    bool lastBleState;
     bool colonState;
     unsigned long lastColonBlinkMillis;
 

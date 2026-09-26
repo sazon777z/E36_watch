@@ -26,21 +26,20 @@ public:
     void init();
     void update();
 
-    // Синхронизация через Wi-Fi NTP
-    bool syncNtp(int gmtOffsetHours = DEFAULT_TIMEZONE_OFFSET, int daylightOffsetSec = 0);
-
-    // Ручная установка времени
+    // Установка времени через BLE или вручную
+    void setEpoch(time_t epoch);
     void setManualTime(int year, int month, int day, int hour, int minute, int second);
+    void setTimeOnly(int hour, int minute, int second);
+    void setDateOnly(int day, int month, int year);
 
     // Текущие данные времени
     const TimeData& getTime() const { return currentTime; }
-    bool isTimeSynced() const { return ntpSynced; }
+    bool isTimeSynced() const { return timeSynced; }
     unsigned long getUptimeSeconds() const;
 
 private:
     TimeData currentTime;
-    bool ntpSynced;
-    unsigned long lastNtpSyncMillis;
+    bool timeSynced;
 
     static const char* daysRu[7];
     static const char* daysEn[7];

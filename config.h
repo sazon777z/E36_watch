@@ -43,21 +43,14 @@
 #define FADE_STEP_DELAY_MS      4     // Скорость плавного розжига/затухания
 
 // =============================================================================
-// НАСТРОЙКИ ВРЕМЕНИ И WI-FI
+// НАСТРОЙКИ BLUETOOTH LOW ENERGY (BLE)
 // =============================================================================
-#define DEFAULT_TIMEZONE_OFFSET 3     // Смещение часового пояса (UTC+3, например, Москва)
-#define DEFAULT_TIMEZONE_MIN    0
-#define NTP_SERVER_1            "pool.ntp.org"
-#define NTP_SERVER_2            "time.nist.gov"
-#define NTP_SYNC_INTERVAL_SEC   3600  // Синхронизация раз в час
-
-// Wi-Fi точка доступа для настроек
-#define AP_SSID                 "BMW_E36_OBC"
-#define AP_PASSWORD             "12345678"
-#define AP_IP_OCTET             4     // 192.168.4.1
-
-// Имя хоста mDNS (http://bmw-e36.local)
-#define MDNS_HOSTNAME           "bmw-e36"
+#define BLE_DEVICE_NAME         "BMW-E36-OBC"
+// Стандартный Nordic UART Service (NUS)
+#define BLE_SERVICE_UUID        "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+#define BLE_CHAR_RX_UUID        "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+#define BLE_CHAR_TX_UUID        "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+#define DEFAULT_TIMEZONE_OFFSET 3     // Смещение часового пояса (UTC+3)
 
 // =============================================================================
 // НАСТРОЙКИ ВОЛЬТМЕТРА И БОРТСЕТИ

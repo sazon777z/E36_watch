@@ -100,6 +100,24 @@ public:
         }
     }
 
+    // Иконка Bluetooth
+    static void drawBluetooth(Adafruit_ST7789& tft, int16_t x, int16_t y, uint16_t color, bool connected) {
+        uint16_t c = connected ? color : COLOR_MID_GRAY;
+        // Центральная вертикальная линия
+        tft.drawFastVLine(x + 5, y + 1, 13, c);
+        tft.drawFastVLine(x + 6, y + 1, 13, c);
+        // Верхний и нижний шевроны символа Bluetooth
+        tft.drawLine(x + 2, y + 4, x + 9, y + 10, c);
+        tft.drawLine(x + 9, y + 10, x + 5, y + 14, c);
+        tft.drawLine(x + 2, y + 10, x + 9, y + 4, c);
+        tft.drawLine(x + 9, y + 4, x + 5, y, c);
+
+        if (!connected) {
+            // Маленькая точка снизу при ожидании подключения
+            tft.drawPixel(x + 5, y + 16, COLOR_DARK_GRAY);
+        }
+    }
+
     // Иконка Wi-Fi
     static void drawWifi(Adafruit_ST7789& tft, int16_t x, int16_t y, uint16_t color, bool connected) {
         if (!connected) {

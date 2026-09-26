@@ -1,5 +1,4 @@
 #include "time_keeper.h"
-#include <WiFi.h>
 #include <sys/time.h>
 
 TimeKeeper Time;
@@ -7,7 +6,7 @@ TimeKeeper Time;
 const char* TimeKeeper::daysRu[7] = { "ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ" };
 const char* TimeKeeper::daysEn[7] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
 
-TimeKeeper::TimeKeeper() : ntpSynced(false), lastNtpSyncMillis(0) {
+TimeKeeper::TimeKeeper() : timeSynced(false) {
     memset(&currentTime, 0, sizeof(TimeData));
     currentTime.dayOfWeekStrRu = "ПН";
     currentTime.dayOfWeekStrEn = "MON";
@@ -44,24 +43,47 @@ void TimeKeeper::update() {
     }
 }
 
-bool TimeKeeper::syncNtp(int gmtOffsetHours, int daylightOffsetSec) {
-    if (WiFi.status() != WL_CONNECTED) {
-        return false;
-    }
+void TimeKeeper::setEpoch(time_t epoch) {
+    struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
+    settimeofday(&tv, NULL);
+    timeSynced = true;
+    update();
+}
 
-    long gmtOffsetSec = gmtOffsetHours * 3600;
-    configTime(gmtOffsetSec, daylightOffsetSec, NTP_SERVER_1, NTP_SERVER_2);
-
+void TimeKeeper::setTimeOnly(int hour, int minute, int second) {
+    time_t now;
     struct tm timeinfo;
-    // Ожидание синхронизации до 2 секунд
-    if (getLocalTime(&timeinfo, 2000)) {
-        ntpSynced = true;
-        lastNtpSyncMillis = millis();
-        update();
-        return true;
-    }
+    time(&now);
+    localtime_r(&now, &timeinfo);
 
-    return false;
+    timeinfo.tm_hour = hour;
+    timeinfo.tm_min = minute;
+    timeinfo.tm_sec = second;
+    timeinfo.tm_isdst = -1;
+
+    time_t t_new = mktime(&timeinfo);
+    struct timeval tv = { .tv_sec = t_new, .tv_usec = 0 };
+    settimeofday(&tv, NULL);
+    timeSynced = true;
+    update();
+}
+
+void TimeKeeper::setDateOnly(int day, int month, int year) {
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+
+    timeinfo.tm_mday = day;
+    timeinfo.tm_mon = month - 1;
+    timeinfo.tm_year = year - 1900;
+    timeinfo.tm_isdst = -1;
+
+    time_t t_new = mktime(&timeinfo);
+    struct timeval tv = { .tv_sec = t_new, .tv_usec = 0 };
+    settimeofday(&tv, NULL);
+    timeSynced = true;
+    update();
 }
 
 void TimeKeeper::setManualTime(int year, int month, int day, int hour, int minute, int second) {
