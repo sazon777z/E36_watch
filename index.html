@@ -1473,12 +1473,34 @@
             }, 100);
         }
 
-        // Регистрация Service Worker для PWA (автономная работа и оффлайн-кэш)
+        // Регистрация Service Worker для PWA (автономная работа, автообновление и оффлайн-кэш)
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')
-                    .then(reg => log('PWA Service Worker активен'))
+                    .then(reg => {
+                        log('PWA Service Worker активен');
+                        // Периодическая проверка и отслеживание обновлений
+                        reg.onupdatefound = () => {
+                            const newWorker = reg.installing;
+                            if (newWorker) {
+                                newWorker.onstatechange = () => {
+                                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                        log('⚡ Загружена новая версия приложения!');
+                                    }
+                                };
+                            }
+                        };
+                    })
                     .catch(err => log('SW info: ' + err.message));
+            });
+
+            // Автоматическое бесшовное обновление интерфейса при обновлении кэша
+            let refreshing = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!refreshing) {
+                    refreshing = true;
+                    window.location.reload();
+                }
             });
         }
 
