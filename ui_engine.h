@@ -149,6 +149,7 @@ private:
     lv_obj_t* lbl_digital_title;
     lv_obj_t* lbl_digital_val;
     lv_obj_t* lbl_digital_unit;
+    lv_obj_t* lbl_digital_peak;
     lv_obj_t* lbl_digital_warn_limit;
 
     // Виджеты Экрана 6: Настройки и инфо

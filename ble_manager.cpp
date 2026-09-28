@@ -103,13 +103,15 @@ void BleManager::update() {
         lastTelemetryBroadcast = millis();
         const SensorData& s = Sensors.getData();
         const TripData& tr = Trip.getData();
+        const TripPeaks& pk = Trip.getPeaks();
         const WarningState& ws = Warnings.getState();
 
-        char jsonBuf[220];
+        char jsonBuf[320];
         snprintf(jsonBuf, sizeof(jsonBuf), 
-                 "{\"rpm\":%d,\"clt\":%.1f,\"boost\":%.2f,\"afr\":%.1f,\"volt\":%.1f,\"spd\":%.1f,\"trip\":%.1f,\"fuel\":%.1f,\"warn\":{\"b\":%d,\"c\":%d,\"a\":%d}}\n",
+                 "{\"rpm\":%d,\"clt\":%.1f,\"boost\":%.2f,\"afr\":%.1f,\"volt\":%.1f,\"spd\":%.1f,\"trip\":%.1f,\"fuel\":%.1f,\"peaks\":{\"rpm\":%d,\"b\":%.2f,\"c\":%.1f,\"a\":%.1f,\"spd\":%.1f,\"f\":%.1f},\"warn\":{\"b\":%d,\"c\":%d,\"a\":%d}}\n",
                  s.ms2.rpm, s.ms2Online ? s.ms2.clt_c : s.tempOutdoor, s.ms2.boost_bar, s.ms2.afr, s.batteryVoltage,
                  tr.current_speed_kmh, tr.trip_distance_km, tr.instant_consumption,
+                 pk.max_rpm, pk.peak_boost_bar, pk.max_clt_c, (pk.min_afr <= 30.0f) ? pk.min_afr : 0.0f, pk.max_speed_kmh, pk.peak_instant_fuel,
                  ws.boostAlarm ? 1 : 0, ws.cltAlarm ? 1 : 0, ws.afrAlarm ? 1 : 0);
 
         sendString(jsonBuf);

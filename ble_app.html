@@ -179,6 +179,14 @@
             color: var(--text-white);
         }
 
+        .tele-peak {
+            font-size: 11px;
+            font-weight: 700;
+            color: #ffa000;
+            margin-top: 4px;
+            letter-spacing: 0.5px;
+        }
+
         .range-wrapper {
             display: flex;
             flex-direction: column;
@@ -298,24 +306,29 @@
                 <div class="tele-card">
                     <div class="tele-label">RPM</div>
                     <div class="tele-val" id="valRpm">---</div>
+                    <div class="tele-peak">ПИК: <span id="peakRpm">---</span></div>
                 </div>
                 <div class="tele-card">
                     <div class="tele-label">BOOST</div>
                     <div class="tele-val" id="valBoost">---</div>
+                    <div class="tele-peak">ПИК: <span id="peakBoost">---</span></div>
                 </div>
                 <div class="tele-card">
                     <div class="tele-label">COOLANT</div>
                     <div class="tele-val" id="valClt">---</div>
+                    <div class="tele-peak">ПИК: <span id="peakClt">---</span></div>
                 </div>
             </div>
             <div class="grid-2" style="margin-top: 10px;">
                 <div class="tele-card">
                     <div class="tele-label">AFR / LAMBDA</div>
                     <div class="tele-val" id="valAfr">---</div>
+                    <div class="tele-peak">ПИК: <span id="peakAfr">---</span></div>
                 </div>
                 <div class="tele-card">
                     <div class="tele-label">BATTERY</div>
                     <div class="tele-val" id="valVolt">---</div>
+                    <div class="tele-peak">БОДРОСТЬ</div>
                 </div>
             </div>
         </div>
@@ -330,14 +343,17 @@
                 <div class="tele-card">
                     <div class="tele-label">SPEED</div>
                     <div class="tele-val" id="valSpd">---</div>
+                    <div class="tele-peak">МАКС: <span id="peakSpd">---</span></div>
                 </div>
                 <div class="tele-card">
                     <div class="tele-label">TRIP KM</div>
                     <div class="tele-val" id="valTrip">---</div>
+                    <div class="tele-peak">СУТОЧНЫЙ</div>
                 </div>
                 <div class="tele-card">
                     <div class="tele-label">РАСХОД</div>
                     <div class="tele-val" id="valFuel">---</div>
+                    <div class="tele-peak">ПИК: <span id="peakFuel">---</span></div>
                 </div>
             </div>
             <div style="margin-top: 8px; font-size: 11px; color: #888; text-align: right;">
@@ -524,6 +540,28 @@
                         document.getElementById('valBoost').style.color = data.warn.b ? '#ff2222' : '#ffffff';
                         document.getElementById('valClt').style.color = data.warn.c ? '#ff2222' : '#ffffff';
                         document.getElementById('valAfr').style.color = data.warn.a ? '#ff2222' : '#ffffff';
+                    }
+
+                    // Пиковые значения за поездку
+                    if (data.peaks) {
+                        if (data.peaks.rpm !== undefined && document.getElementById('peakRpm')) {
+                            document.getElementById('peakRpm').textContent = data.peaks.rpm;
+                        }
+                        if (data.peaks.b !== undefined && document.getElementById('peakBoost')) {
+                            document.getElementById('peakBoost').textContent = (data.peaks.b >= 0 ? '+' : '') + data.peaks.b.toFixed(2) + 'b';
+                        }
+                        if (data.peaks.c !== undefined && document.getElementById('peakClt')) {
+                            document.getElementById('peakClt').textContent = Math.round(data.peaks.c) + '°C';
+                        }
+                        if (data.peaks.a !== undefined && document.getElementById('peakAfr')) {
+                            document.getElementById('peakAfr').textContent = (data.peaks.a > 0) ? data.peaks.a.toFixed(1) : '--.-';
+                        }
+                        if (data.peaks.spd !== undefined && document.getElementById('peakSpd')) {
+                            document.getElementById('peakSpd').textContent = Math.round(data.peaks.spd);
+                        }
+                        if (data.peaks.f !== undefined && document.getElementById('peakFuel')) {
+                            document.getElementById('peakFuel').textContent = data.peaks.f.toFixed(1);
+                        }
                     }
 
                     // Пороги варнингов

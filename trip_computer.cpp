@@ -13,6 +13,7 @@ TripComputer::TripComputer()
     memset(&data, 0, sizeof(TripData));
     data.total_odometer_km = 245000.0f; // Значение по умолчанию
     data.isLitersPerHour = true;
+    resetPeaks();
 }
 
 void TripComputer::init() {
@@ -51,14 +52,26 @@ void TripComputer::saveToNvs(bool force) {
     }
 }
 
+void TripComputer::resetPeaks() {
+    peaks.peak_boost_bar = 0.0f;
+    peaks.max_clt_c = 0.0f;
+    peaks.min_afr = 99.0f;
+    peaks.max_afr = 0.0f;
+    peaks.max_speed_kmh = 0.0f;
+    peaks.max_rpm = 0;
+    peaks.max_iat_c = 0.0f;
+    peaks.peak_instant_fuel = 0.0f;
+}
+
 void TripComputer::resetTrip() {
     data.trip_distance_km = 0.0f;
     data.trip_fuel_liters = 0.0f;
     data.avg_consumption_l_100km = 0.0f;
     data.trip_time_sec = 0;
     data.avg_speed_kmh = 0.0f;
+    resetPeaks();
     saveToNvs(true);
-    Serial.println("[TRIP] Суточный одометр сброшен.");
+    Serial.println("[TRIP] Суточный одометр и пиковые значения сброшены.");
 }
 
 void TripComputer::setTotalOdometer(float km) {
@@ -148,6 +161,38 @@ void TripComputer::update() {
         data.avg_speed_kmh = (data.trip_distance_km / (float)data.trip_time_sec) * 3600.0f;
     }
 
-    // 6. Периодическое сохранение одометра в энергонезависимую память
+    // 6. Обновление пиковых параметров за поездку
+    if (data.current_speed_kmh > peaks.max_speed_kmh) {
+        peaks.max_speed_kmh = data.current_speed_kmh;
+    }
+    if (!data.isLitersPerHour && data.instant_consumption > peaks.peak_instant_fuel) {
+        peaks.peak_instant_fuel = data.instant_consumption;
+    }
+
+    const Ms2Telemetry& ms2 = CanBus.getTelemetry();
+    if (ms2.isOnline) {
+        if (ms2.boost_bar > peaks.peak_boost_bar) {
+            peaks.peak_boost_bar = ms2.boost_bar;
+        }
+        if (ms2.clt_c > peaks.max_clt_c) {
+            peaks.max_clt_c = ms2.clt_c;
+        }
+        if (ms2.rpm > peaks.max_rpm) {
+            peaks.max_rpm = ms2.rpm;
+        }
+        if (ms2.mat_c > peaks.max_iat_c) {
+            peaks.max_iat_c = ms2.mat_c;
+        }
+        if (ms2.rpm > 600 && ms2.afr > 7.0f && ms2.afr < 25.0f) {
+            if (ms2.afr < peaks.min_afr) {
+                peaks.min_afr = ms2.afr;
+            }
+            if (ms2.afr > peaks.max_afr) {
+                peaks.max_afr = ms2.afr;
+            }
+        }
+    }
+
+    // 7. Периодическое сохранение одометра в энергонезависимую память
     saveToNvs(false);
 }
