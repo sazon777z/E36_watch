@@ -133,8 +133,12 @@ void loop() {
 
         // Автоматическое диммирование при включении габаритов
         if (Sensors.getData().headlightsOn) {
-            if (Display.getBrightness() > NIGHT_BRIGHTNESS) {
+            if (Display.getBrightness() != NIGHT_BRIGHTNESS) {
                 Display.setBrightness(NIGHT_BRIGHTNESS);
+            }
+        } else {
+            if (Display.getBrightness() != DEFAULT_BRIGHTNESS) {
+                Display.setBrightness(DEFAULT_BRIGHTNESS);
             }
         }
     }
@@ -164,6 +168,22 @@ void loop() {
             Serial.println("[CMD] 'r' -> Сброс одометра поездки");
             Trip.resetTrip();
             UI.notifyTripReset();
+        } else if (c == 't' || c == 'T') {
+            Serial.printf("[TEST] Тест TFT: Текущая яркость=%d, Габариты=%d, заливаем красным...\n", 
+                          Display.getBrightness(), Sensors.getData().headlightsOn);
+            Display.setBrightness(255);
+            Display.getTft().fillScreen(0xF800); // Красный
+            delay(1000);
+            Display.getTft().fillScreen(0x07E0); // Зеленый
+            delay(1000);
+            Display.getTft().fillScreen(0x001F); // Синий
+            delay(1000);
+            Display.getTft().fillScreen(0x0000);
+            lv_obj_invalidate(lv_scr_act());
+            Serial.println("[TEST] Тест завершен, LVGL экран перерисован.");
+        } else if (c == 'b' || c == 'B') {
+            Serial.printf("[CMD] Яркость была %d, принудительно ставим 255!\n", Display.getBrightness());
+            Display.setBrightness(255);
         } else if (c >= '1' && c <= '7') {
             ScreenId sid = (ScreenId)(c - '0');
             Serial.printf("[CMD] Прямой переход на экран %d\n", (int)sid);

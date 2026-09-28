@@ -26,13 +26,33 @@ void DisplayDriver::initBacklightPWM() {
 void DisplayDriver::setBrightness(uint8_t brightness) {
     currentBrightness = brightness;
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
-    ledcWrite(PIN_TFT_BL, brightness);
+    if (brightness == 0) {
+        ledcDetach(PIN_TFT_BL);
+        pinMode(PIN_TFT_BL, OUTPUT);
+        digitalWrite(PIN_TFT_BL, LOW);
+    } else if (brightness >= 240) {
+        ledcDetach(PIN_TFT_BL);
+        pinMode(PIN_TFT_BL, OUTPUT);
+        digitalWrite(PIN_TFT_BL, HIGH);
+    } else {
+        ledcAttach(PIN_TFT_BL, 5000, 8);
+        ledcWrite(PIN_TFT_BL, brightness);
+    }
 #else
     ledcWrite(0, brightness);
 #endif
 }
 
 bool DisplayDriver::init() {
+    // Аппаратный сброс контроллера ST7789
+    pinMode(PIN_TFT_RST, OUTPUT);
+    digitalWrite(PIN_TFT_RST, HIGH);
+    delay(10);
+    digitalWrite(PIN_TFT_RST, LOW);
+    delay(20);
+    digitalWrite(PIN_TFT_RST, HIGH);
+    delay(50);
+
     initBacklightPWM();
 
     // Инициализация аппаратного SPI на кастомных пинах ESP32-S3
@@ -49,6 +69,7 @@ bool DisplayDriver::init() {
     tft->fillScreen(COLOR_BLACK);
 
     isInitialized = true;
+    setBrightness(DEFAULT_BRIGHTNESS);
     return true;
 }
 

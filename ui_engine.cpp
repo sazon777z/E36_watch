@@ -107,6 +107,12 @@ UiEngine::UiEngine()
 // Callback сброса буфера кадра LVGL на дисплей ST7789 через SPI 40 МГц
 // -----------------------------------------------------------------------------
 void UiEngine::dispFlushCb(lv_disp_drv_t* disp_drv, const lv_area_t* area, lv_color_t* color_p) {
+    static uint32_t flushCount = 0;
+    flushCount++;
+    if (flushCount <= 3 || flushCount % 100 == 0) {
+        Serial.printf("[LVGL] flush #%lu: (%d,%d)-(%d,%d)\n", flushCount, area->x1, area->y1, area->x2, area->y2);
+    }
+
     uint32_t w = (area->x2 - area->x1 + 1);
     uint32_t h = (area->y2 - area->y1 + 1);
 
@@ -648,7 +654,7 @@ void UiEngine::createScreenSettings() {
 }
 
 void UiEngine::showBootSplash(const char* subtitle) {
-    Display.setBrightness(0);
+    Display.setBrightness(DEFAULT_BRIGHTNESS);
     Adafruit_ST7789& tft = Display.getTft();
     tft.fillScreen(0x0000);
 
@@ -669,13 +675,8 @@ void UiEngine::showBootSplash(const char* subtitle) {
         tft.print(subtitle);
     }
 
-    Display.fadeIn(DEFAULT_BRIGHTNESS, 4);
     delay(900);
-    Display.fadeOut(3);
-
     tft.fillScreen(0x0000);
-    setScreen(ScreenId::CLASSIC_CLOCK);
-    Display.fadeIn(DEFAULT_BRIGHTNESS, 3);
 }
 
 void UiEngine::nextScreen() {
