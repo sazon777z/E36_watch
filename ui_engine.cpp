@@ -29,7 +29,6 @@ UiEngine::UiEngine()
       scr_trip(nullptr),
       scr_telem(nullptr),
       scr_m_perf(nullptr),
-      scr_gauge_menu(nullptr),
       scr_gauge(nullptr),
       scr_settings(nullptr),
       lbl_clock(nullptr),
@@ -79,24 +78,12 @@ UiEngine::UiEngine()
       lbl_m_offline(nullptr),
       lbl_gps_sats_4(nullptr),
       lbl_ms2_status_4(nullptr),
-      card_menu_preview(nullptr),
-      lbl_menu_count(nullptr),
-      lbl_menu_title(nullptr),
-      lbl_menu_val(nullptr),
-      lbl_menu_unit(nullptr),
-      lbl_menu_hint(nullptr),
-      lbl_gps_sats_menu(nullptr),
-      lbl_ms2_status_menu(nullptr),
       currentGauge(GaugeType::BOOST),
-      meter_gauge(nullptr),
-      scale_gauge(nullptr),
-      needle_gauge(nullptr),
-      arc_warn_gauge(nullptr),
-      lbl_gauge_title(nullptr),
-      lbl_gauge_val(nullptr),
-      lbl_gauge_unit(nullptr),
-      lbl_gps_sats_5(nullptr),
-      lbl_ms2_status_5(nullptr),
+      card_digital_gauge(nullptr),
+      lbl_digital_title(nullptr),
+      lbl_digital_val(nullptr),
+      lbl_digital_unit(nullptr),
+      lbl_digital_warn_limit(nullptr),
       lbl_set_ble(nullptr),
       lbl_set_can(nullptr),
       lbl_set_gps(nullptr),
@@ -221,13 +208,13 @@ void UiEngine::init() {
     createScreenTrip();
     createScreenTelem();
     createScreenMPerf();
-    createScreenGaugeMenu();
     createScreenGauge();
     createScreenSettings();
 
     // Загрузка стартового экрана часов
-    lv_scr_load(scr_clock);
     currentScreen = ScreenId::CLASSIC_CLOCK;
+    lv_scr_load(scr_clock);
+    lv_obj_invalidate(scr_clock);
     lastTickMillis = millis();
 }
 
@@ -697,13 +684,13 @@ void UiEngine::setScreen(ScreenId screen) {
             case ScreenId::OBC_TRIP_FUEL:  target = scr_trip; break;
             case ScreenId::OBC_TELEMETRY:  target = scr_telem; break;
             case ScreenId::M_PERFORMANCE:  target = scr_m_perf; break;
-            case ScreenId::GAUGE_SELECTOR: target = scr_gauge_menu; break;
             case ScreenId::SINGLE_GAUGE:   target = scr_gauge; break;
             case ScreenId::SETTINGS_INFO:  target = scr_settings; break;
             default: target = scr_clock; break;
         }
         if (target) {
             lv_scr_load(target);
+            lv_obj_invalidate(target);
         }
     }
 }
@@ -735,9 +722,6 @@ void UiEngine::update() {
             break;
         case ScreenId::M_PERFORMANCE:
             updateMPerfScreen();
-            break;
-        case ScreenId::GAUGE_SELECTOR:
-            updateGaugeMenuScreen();
             break;
         case ScreenId::SINGLE_GAUGE:
             updateGaugeScreen();
@@ -1012,403 +996,52 @@ void UiEngine::updateSettingsScreen() {
 }
 
 // -----------------------------------------------------------------------------
-// ЭКРАН 5: СЕЛЕКТОР / МЕНЮ ВЫБОРА ПРИБОРОВ (GAUGE SELECTOR)
-// -----------------------------------------------------------------------------
-void UiEngine::createScreenGaugeMenu() {
-    scr_gauge_menu = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(scr_gauge_menu, COLOR_LV_BLACK, 0);
-    lv_obj_clear_flag(scr_gauge_menu, LV_OBJ_FLAG_SCROLLABLE);
-
-    // Статус MegaSquirt 2 в верхнем левом углу
-    lbl_ms2_status_menu = createMs2StatusLabel(scr_gauge_menu);
-
-    // Индикатор спутников в правом верхнем углу
-    lbl_gps_sats_menu = createGpsCornerLabel(scr_gauge_menu);
-
-    // Заголовок и счетчик выбранного датчика (1/7)
-    lbl_menu_count = lv_label_create(scr_gauge_menu);
-    lv_obj_set_style_text_font(lbl_menu_count, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lbl_menu_count, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_menu_count, LV_ALIGN_TOP_MID, 0, 14);
-    lv_label_set_text(lbl_menu_count, "SELECT GAUGE (1/7)");
-
-    // Центральная премиальная карточка предпросмотра датчика
-    card_menu_preview = createCardTile(scr_gauge_menu, 16, 44, 288, 148);
-
-    // Название выбранного прибора
-    lbl_menu_title = lv_label_create(card_menu_preview);
-    lv_obj_set_style_text_font(lbl_menu_title, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(lbl_menu_title, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_menu_title, LV_ALIGN_TOP_MID, 0, 10);
-    lv_label_set_text(lbl_menu_title, "BOOST / TURBO");
-
-    // Живое текущее значение датчика
-    lbl_menu_val = lv_label_create(card_menu_preview);
-    lv_obj_set_style_text_font(lbl_menu_val, &lv_font_montserrat_48, 0);
-    lv_obj_set_style_text_color(lbl_menu_val, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_menu_val, LV_ALIGN_CENTER, 0, 8);
-    lv_label_set_text(lbl_menu_val, "0.00");
-
-    // Единица измерения
-    lbl_menu_unit = lv_label_create(card_menu_preview);
-    lv_obj_set_style_text_font(lbl_menu_unit, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lbl_menu_unit, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_menu_unit, LV_ALIGN_BOTTOM_MID, 0, -8);
-    lv_label_set_text(lbl_menu_unit, "BAR");
-
-    // Нижняя строка подсказки однокнопочного управления
-    lbl_menu_hint = lv_label_create(scr_gauge_menu);
-    lv_obj_set_style_text_font(lbl_menu_hint, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_menu_hint, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_menu_hint, LV_ALIGN_BOTTOM_MID, 0, -10);
-    lv_label_set_text(lbl_menu_hint, LV_SYMBOL_REFRESH " 2x: Next  |  " LV_SYMBOL_EYE_OPEN " Hold: Open");
-}
-
-void UiEngine::updateGaugeMenuScreen() {
-    const SensorData& sens = Sensors.getData();
-    const TripData& trip = Trip.getData();
-    const GpsData& gps = Gps.getData();
-    const WarningState& warn = Warnings.getState();
-
-    // Обновление угловых статусов
-    updateMs2StatusWidget(lbl_ms2_status_menu, sens.ms2Online);
-    if (gps.hasFix) {
-        lv_obj_set_style_text_color(lbl_gps_sats_menu, COLOR_LV_WHITE, 0);
-        lv_label_set_text_fmt(lbl_gps_sats_menu, LV_SYMBOL_GPS " %d", gps.satellites);
-    } else {
-        lv_obj_set_style_text_color(lbl_gps_sats_menu, COLOR_LV_MID_GRAY, 0);
-        if (gps.satellites > 0) {
-            lv_label_set_text_fmt(lbl_gps_sats_menu, LV_SYMBOL_GPS " %d", gps.satellites);
-        } else {
-            lv_label_set_text(lbl_gps_sats_menu, LV_SYMBOL_GPS " --");
-        }
-    }
-
-    // Обновляем номер датчика
-    lv_label_set_text_fmt(lbl_menu_count, "SELECT GAUGE (%d/%d)", (int)currentGauge + 1, (int)GaugeType::COUNT);
-
-    bool isAlarm = false;
-    char valBuf[32] = {0};
-
-    switch (currentGauge) {
-        case GaugeType::BOOST: {
-            lv_label_set_text(lbl_menu_title, "BOOST / TURBO");
-            lv_label_set_text(lbl_menu_unit, "BAR");
-            float b = sens.ms2Online ? sens.ms2.boost_bar : 0.0f;
-            snprintf(valBuf, sizeof(valBuf), "%+.2f", b);
-            isAlarm = warn.boostAlarm;
-            break;
-        }
-        case GaugeType::COOLANT: {
-            lv_label_set_text(lbl_menu_title, "COOLANT TEMP");
-            lv_label_set_text(lbl_menu_unit, "\xC2\xB0 C");
-            float clt = sens.ms2Online ? sens.ms2.clt_c : sens.tempOutdoor;
-            snprintf(valBuf, sizeof(valBuf), "%d", (int)round(clt));
-            isAlarm = warn.cltAlarm;
-            break;
-        }
-        case GaugeType::AFR: {
-            lv_label_set_text(lbl_menu_title, "AIR / FUEL RATIO");
-            lv_label_set_text(lbl_menu_unit, "AFR");
-            if (sens.ms2Online) {
-                snprintf(valBuf, sizeof(valBuf), "%.1f", sens.ms2.afr);
-            } else {
-                snprintf(valBuf, sizeof(valBuf), "--.-");
-            }
-            isAlarm = warn.afrAlarm;
-            break;
-        }
-        case GaugeType::INST_FUEL: {
-            lv_label_set_text(lbl_menu_title, "INSTANT FUEL");
-            lv_label_set_text(lbl_menu_unit, trip.isLitersPerHour ? "L / HOUR" : "L / 100KM");
-            snprintf(valBuf, sizeof(valBuf), "%.1f", trip.instant_consumption);
-            break;
-        }
-        case GaugeType::SPEED: {
-            lv_label_set_text(lbl_menu_title, "GPS SPEED");
-            lv_label_set_text(lbl_menu_unit, "KM / H");
-            snprintf(valBuf, sizeof(valBuf), "%d", (int)round(trip.current_speed_kmh));
-            break;
-        }
-        case GaugeType::INTAKE_TEMP: {
-            lv_label_set_text(lbl_menu_title, "INTAKE AIR TEMP");
-            lv_label_set_text(lbl_menu_unit, "\xC2\xB0 C");
-            float mat = sens.ms2Online ? sens.ms2.mat_c : sens.tempCabin;
-            snprintf(valBuf, sizeof(valBuf), "%d", (int)round(mat));
-            isAlarm = (mat >= 55.0f);
-            break;
-        }
-        case GaugeType::RPM: {
-            lv_label_set_text(lbl_menu_title, "TACHOMETER");
-            lv_label_set_text(lbl_menu_unit, "RPM");
-            uint16_t rpm = sens.ms2Online ? sens.ms2.rpm : 0;
-            snprintf(valBuf, sizeof(valBuf), "%d", rpm);
-            isAlarm = (rpm >= 6500);
-            break;
-        }
-        default:
-            break;
-    }
-
-    lv_label_set_text(lbl_menu_val, valBuf);
-    applyCardWarning(card_menu_preview, isAlarm, warn.blinkPhase);
-}
-
-// -----------------------------------------------------------------------------
-// ЭКРАН 6: ПОЛНОЭКРАННЫЙ СТРЕЛОЧНЫЙ ПРИБОР (SINGLE GAUGE - 180° АРКА)
+// ЭКРАН 5: ПОЛНОЭКРАННЫЙ ЦИФРОВОЙ ПРИБОР (SINGLE DIGITAL GAUGE)
 // -----------------------------------------------------------------------------
 void UiEngine::createScreenGauge() {
     scr_gauge = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(scr_gauge, COLOR_LV_BLACK, 0);
     lv_obj_clear_flag(scr_gauge, LV_OBJ_FLAG_SCROLLABLE);
 
-    lbl_ms2_status_5 = nullptr;
-    lbl_gps_sats_5 = nullptr;
+    // Крупная спортивная карточка на весь экран (300 x 220 px)
+    card_digital_gauge = createCardTile(scr_gauge, 10, 10, 300, 220);
 
-    // Центральные текстовые метки (располагаем в нижней свободной зоне под аркой)
-    lbl_gauge_title = lv_label_create(scr_gauge);
-    lv_obj_set_style_text_font(lbl_gauge_title, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lbl_gauge_title, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_gauge_title, LV_ALIGN_TOP_MID, 0, 116);
-    lv_label_set_text(lbl_gauge_title, "BOOST / TURBO");
+    // Сверху: Название прибора (шрифт Montserrat 20)
+    lbl_digital_title = lv_label_create(card_digital_gauge);
+    lv_obj_set_style_text_font(lbl_digital_title, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(lbl_digital_title, COLOR_LV_SILVER, 0);
+    lv_obj_align(lbl_digital_title, LV_ALIGN_TOP_MID, 0, 8);
+    lv_label_set_text(lbl_digital_title, "BOOST / TURBO");
 
-    lbl_gauge_val = lv_label_create(scr_gauge);
-    lv_obj_set_style_text_font(lbl_gauge_val, &lv_font_montserrat_48, 0);
-    lv_obj_set_style_text_color(lbl_gauge_val, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_gauge_val, LV_ALIGN_TOP_MID, 0, 136);
-    lv_label_set_text(lbl_gauge_val, "0.00");
+    // По центру: Максимально крупное цифровое значение (нативный 4bpp шрифт 70 px)
+    lbl_digital_val = lv_label_create(card_digital_gauge);
+    lv_obj_set_style_text_font(lbl_digital_val, &lv_font_clock_70, 0);
+    lv_obj_set_style_text_color(lbl_digital_val, COLOR_LV_WHITE, 0);
+    lv_obj_align(lbl_digital_val, LV_ALIGN_CENTER, 0, -10);
+    lv_label_set_text(lbl_digital_val, "0.00");
 
-    lbl_gauge_unit = lv_label_create(scr_gauge);
-    lv_obj_set_style_text_font(lbl_gauge_unit, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lbl_gauge_unit, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_gauge_unit, LV_ALIGN_TOP_MID, 0, 190);
-    lv_label_set_text(lbl_gauge_unit, "BAR");
+    // Под цифрами: Единица измерения
+    lbl_digital_unit = lv_label_create(card_digital_gauge);
+    lv_obj_set_style_text_font(lbl_digital_unit, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(lbl_digital_unit, COLOR_LV_MID_GRAY, 0);
+    lv_obj_align(lbl_digital_unit, LV_ALIGN_CENTER, 0, 42);
+    lv_label_set_text(lbl_digital_unit, "BAR");
 
-    // Построение круговой полукруглой 180° шкалы и стрелки
-    configureGaugeScale(currentGauge);
-}
-
-void UiEngine::configureGaugeScale(GaugeType type) {
-    if (meter_gauge) {
-        lv_obj_del(meter_gauge);
-        meter_gauge = nullptr;
-    }
-
-    meter_gauge = lv_meter_create(scr_gauge);
-    // Размер 290 px в ширину (на экране 320), высота 190 px
-    lv_obj_set_size(meter_gauge, 290, 190);
-    lv_obj_align(meter_gauge, LV_ALIGN_TOP_MID, 0, 8);
-    lv_obj_set_style_bg_color(meter_gauge, COLOR_LV_BLACK, 0);
-    lv_obj_set_style_border_width(meter_gauge, 0, 0);
-    lv_obj_clear_flag(meter_gauge, LV_OBJ_FLAG_SCROLLABLE);
-
-    // Добавляем обработчик форматирования делений шкалы
-    lv_obj_add_event_cb(meter_gauge, meterDrawPartCb, LV_EVENT_DRAW_PART_BEGIN, NULL);
-
-    scale_gauge = lv_meter_add_scale(meter_gauge);
-    const WarningSettings& ws = Warnings.getSettings();
-
-    // Все шкалы имеют angle_range = 180, rotation = 180 (полукруглая верхняя арка)
-    switch (type) {
-        case GaugeType::BOOST: {
-            lv_meter_set_scale_range(meter_gauge, scale_gauge, -100, 200, 180, 180);
-            lv_meter_set_scale_ticks(meter_gauge, scale_gauge, 13, 1, 7, COLOR_LV_MID_GRAY);
-            lv_meter_set_scale_major_ticks(meter_gauge, scale_gauge, 2, 2, 12, COLOR_LV_WHITE, 12);
-
-            // Дуга вакуума (бирюзовая)
-            lv_meter_indicator_t* arc_vac = lv_meter_add_arc(meter_gauge, scale_gauge, 4, COLOR_LV_M_CYAN, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_vac, -100);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_vac, 0);
-
-            // Дуга наддува (белая)
-            int warnVal = (int)round(ws.boost_max_bar * 100.0f);
-            if (warnVal > 200) warnVal = 200;
-            if (warnVal < 20) warnVal = 120;
-
-            lv_meter_indicator_t* arc_norm = lv_meter_add_arc(meter_gauge, scale_gauge, 4, COLOR_LV_WHITE, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_norm, 0);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_norm, warnVal);
-
-            // Дуга передува (красная)
-            arc_warn_gauge = lv_meter_add_arc(meter_gauge, scale_gauge, 6, COLOR_LV_M_RED, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_warn_gauge, warnVal);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_warn_gauge, 200);
-
-            lv_label_set_text(lbl_gauge_title, "BOOST / TURBO");
-            lv_label_set_text(lbl_gauge_unit, "BAR");
-            break;
-        }
-
-        case GaugeType::COOLANT: {
-            lv_meter_set_scale_range(meter_gauge, scale_gauge, 40, 130, 180, 180);
-            lv_meter_set_scale_ticks(meter_gauge, scale_gauge, 10, 1, 7, COLOR_LV_MID_GRAY);
-            lv_meter_set_scale_major_ticks(meter_gauge, scale_gauge, 2, 2, 12, COLOR_LV_WHITE, 12);
-
-            // Холодная зона (синяя)
-            lv_meter_indicator_t* arc_cold = lv_meter_add_arc(meter_gauge, scale_gauge, 4, COLOR_LV_M_BLUE, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_cold, 40);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_cold, 70);
-
-            // Рабочая зона (зеленая)
-            int warnClt = (int)round(ws.clt_max_c);
-            if (warnClt > 130) warnClt = 130;
-            if (warnClt < 80) warnClt = 100;
-
-            lv_meter_indicator_t* arc_norm = lv_meter_add_arc(meter_gauge, scale_gauge, 4, COLOR_LV_ONLINE, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_norm, 80);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_norm, warnClt);
-
-            // Зона перегрева (красная)
-            arc_warn_gauge = lv_meter_add_arc(meter_gauge, scale_gauge, 6, COLOR_LV_M_RED, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_warn_gauge, warnClt);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_warn_gauge, 130);
-
-            lv_label_set_text(lbl_gauge_title, "COOLANT TEMP");
-            lv_label_set_text(lbl_gauge_unit, "\xC2\xB0 C");
-            break;
-        }
-
-        case GaugeType::AFR: {
-            lv_meter_set_scale_range(meter_gauge, scale_gauge, 100, 180, 180, 180);
-            lv_meter_set_scale_ticks(meter_gauge, scale_gauge, 9, 1, 7, COLOR_LV_MID_GRAY);
-            lv_meter_set_scale_major_ticks(meter_gauge, scale_gauge, 2, 2, 12, COLOR_LV_WHITE, 12);
-
-            int richVal = (int)round(ws.afr_rich_min * 10.0f);
-            int leanVal = (int)round(ws.afr_lean_max * 10.0f);
-
-            // Богатая смесь (янтарная)
-            lv_meter_indicator_t* arc_rich = lv_meter_add_arc(meter_gauge, scale_gauge, 4, lv_color_make(255, 170, 0), -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_rich, 100);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_rich, richVal);
-
-            // Оптимальная смесь 14.2 - 15.0 (зеленая)
-            lv_meter_indicator_t* arc_opt = lv_meter_add_arc(meter_gauge, scale_gauge, 4, COLOR_LV_ONLINE, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_opt, 142);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_opt, 150);
-
-            // Бедная смесь (красная)
-            arc_warn_gauge = lv_meter_add_arc(meter_gauge, scale_gauge, 6, COLOR_LV_M_RED, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_warn_gauge, leanVal);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_warn_gauge, 180);
-
-            lv_label_set_text(lbl_gauge_title, "AIR / FUEL RATIO");
-            lv_label_set_text(lbl_gauge_unit, "AFR");
-            break;
-        }
-
-        case GaugeType::INST_FUEL: {
-            lv_meter_set_scale_range(meter_gauge, scale_gauge, 0, 30, 180, 180);
-            lv_meter_set_scale_ticks(meter_gauge, scale_gauge, 13, 1, 7, COLOR_LV_MID_GRAY);
-            lv_meter_set_scale_major_ticks(meter_gauge, scale_gauge, 2, 2, 12, COLOR_LV_WHITE, 12);
-
-            lv_meter_indicator_t* arc_eco = lv_meter_add_arc(meter_gauge, scale_gauge, 4, COLOR_LV_ONLINE, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_eco, 0);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_eco, 10);
-
-            lv_meter_indicator_t* arc_high = lv_meter_add_arc(meter_gauge, scale_gauge, 5, COLOR_LV_M_RED, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_high, 20);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_high, 30);
-
-            lv_label_set_text(lbl_gauge_title, "INSTANT FUEL");
-            lv_label_set_text(lbl_gauge_unit, "L / 100KM");
-            break;
-        }
-
-        case GaugeType::SPEED: {
-            lv_meter_set_scale_range(meter_gauge, scale_gauge, 0, 240, 180, 180);
-            lv_meter_set_scale_ticks(meter_gauge, scale_gauge, 13, 1, 7, COLOR_LV_MID_GRAY);
-            lv_meter_set_scale_major_ticks(meter_gauge, scale_gauge, 2, 2, 12, COLOR_LV_WHITE, 12);
-
-            lv_meter_indicator_t* arc_hwy = lv_meter_add_arc(meter_gauge, scale_gauge, 4, COLOR_LV_ONLINE, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_hwy, 90);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_hwy, 130);
-
-            lv_label_set_text(lbl_gauge_title, "GPS SPEED");
-            lv_label_set_text(lbl_gauge_unit, "KM / H");
-            break;
-        }
-
-        case GaugeType::INTAKE_TEMP: {
-            lv_meter_set_scale_range(meter_gauge, scale_gauge, 0, 80, 180, 180);
-            lv_meter_set_scale_ticks(meter_gauge, scale_gauge, 9, 1, 7, COLOR_LV_MID_GRAY);
-            lv_meter_set_scale_major_ticks(meter_gauge, scale_gauge, 2, 2, 12, COLOR_LV_WHITE, 12);
-
-            lv_meter_indicator_t* arc_cold = lv_meter_add_arc(meter_gauge, scale_gauge, 4, COLOR_LV_M_CYAN, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_cold, 0);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_cold, 30);
-
-            lv_meter_indicator_t* arc_hot = lv_meter_add_arc(meter_gauge, scale_gauge, 5, COLOR_LV_M_RED, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_hot, 50);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_hot, 80);
-
-            lv_label_set_text(lbl_gauge_title, "INTAKE AIR TEMP");
-            lv_label_set_text(lbl_gauge_unit, "\xC2\xB0 C");
-            break;
-        }
-
-        case GaugeType::RPM: {
-            lv_meter_set_scale_range(meter_gauge, scale_gauge, 0, 8000, 180, 180);
-            lv_meter_set_scale_ticks(meter_gauge, scale_gauge, 17, 1, 7, COLOR_LV_MID_GRAY);
-            lv_meter_set_scale_major_ticks(meter_gauge, scale_gauge, 2, 2, 12, COLOR_LV_WHITE, 12);
-
-            lv_meter_indicator_t* arc_pwr = lv_meter_add_arc(meter_gauge, scale_gauge, 4, COLOR_LV_WHITE, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_pwr, 3500);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_pwr, 6500);
-
-            arc_warn_gauge = lv_meter_add_arc(meter_gauge, scale_gauge, 6, COLOR_LV_M_RED, -12);
-            lv_meter_set_indicator_start_value(meter_gauge, arc_warn_gauge, 6500);
-            lv_meter_set_indicator_end_value(meter_gauge, arc_warn_gauge, 8000);
-
-            lv_label_set_text(lbl_gauge_title, "TACHOMETER");
-            lv_label_set_text(lbl_gauge_unit, "RPM x1000");
-            break;
-        }
-
-        default:
-            break;
-    }
-
-    // Спортивная четкая стрелка BMW ///M Red (толщина 4 px)
-    needle_gauge = lv_meter_add_needle_line(meter_gauge, scale_gauge, 4, COLOR_LV_M_RED, -16);
-
-    // Поднимаем текстовые метки на передний план
-    lv_obj_move_foreground(lbl_gauge_title);
-    lv_obj_move_foreground(lbl_gauge_val);
-    lv_obj_move_foreground(lbl_gauge_unit);
-}
-
-void UiEngine::meterDrawPartCb(lv_event_t* e) {
-    lv_obj_draw_part_dsc_t* dsc = (lv_obj_draw_part_dsc_t*)lv_event_get_param(e);
-    if (!dsc || dsc->part != LV_PART_TICKS || dsc->type != LV_METER_DRAW_PART_TICK || !dsc->text) return;
-
-    static char customText[16];
-    switch (UI.getGaugeType()) {
-        case GaugeType::BOOST:
-            if (dsc->value == 0) {
-                snprintf(customText, sizeof(customText), "0");
-            } else {
-                snprintf(customText, sizeof(customText), "%.1f", dsc->value / 100.0f);
-            }
-            dsc->text = customText;
-            break;
-        case GaugeType::AFR:
-            snprintf(customText, sizeof(customText), "%d", (int)(dsc->value / 10));
-            dsc->text = customText;
-            break;
-        case GaugeType::RPM:
-            snprintf(customText, sizeof(customText), "%d", (int)(dsc->value / 1000));
-            dsc->text = customText;
-            break;
-        default:
-            break;
-    }
+    // Внизу: Сохраненные лимиты варнингов для данного прибора
+    lbl_digital_warn_limit = lv_label_create(card_digital_gauge);
+    lv_obj_set_style_text_font(lbl_digital_warn_limit, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(lbl_digital_warn_limit, COLOR_LV_SILVER, 0);
+    lv_obj_align(lbl_digital_warn_limit, LV_ALIGN_BOTTOM_MID, 0, -8);
+    lv_label_set_text(lbl_digital_warn_limit, "WARN LIMIT: > 1.20 BAR");
 }
 
 void UiEngine::setGaugeType(GaugeType type) {
     if (type >= GaugeType::COUNT) type = GaugeType::BOOST;
     currentGauge = type;
-    configureGaugeScale(currentGauge);
     saveGaugeToNvs();
+    if (currentScreen == ScreenId::SINGLE_GAUGE) {
+        updateGaugeScreen();
+    }
 }
 
 void UiEngine::nextGaugeType() {
@@ -1417,75 +1050,87 @@ void UiEngine::nextGaugeType() {
         next = 0;
     }
     setGaugeType((GaugeType)next);
-    Serial.printf("[UI] Переключение типа датчика: %d\n", next);
+    Serial.printf("[UI] Переключение типа цифрового прибора: %d\n", next);
 }
 
 void UiEngine::updateGaugeScreen() {
     const SensorData& sens = Sensors.getData();
     const TripData& trip = Trip.getData();
-    const GpsData& gps = Gps.getData();
     const WarningState& warn = Warnings.getState();
+    const WarningSettings& ws = Warnings.getSettings();
 
-    int32_t needleVal = 0;
-    char valBuf[32] = {0};
     bool isAlarm = false;
+    char valBuf[32] = {0};
+    char limitBuf[48] = {0};
 
     switch (currentGauge) {
         case GaugeType::BOOST: {
+            lv_label_set_text(lbl_digital_title, "BOOST / TURBO");
+            lv_label_set_text(lbl_digital_unit, "BAR");
             float b = sens.ms2Online ? sens.ms2.boost_bar : 0.0f;
-            needleVal = (int32_t)round(b * 100.0f);
             snprintf(valBuf, sizeof(valBuf), "%+.2f", b);
+            snprintf(limitBuf, sizeof(limitBuf), "WARN LIMIT: > %.2f BAR", ws.boost_max_bar);
             isAlarm = warn.boostAlarm;
             break;
         }
 
         case GaugeType::COOLANT: {
+            lv_label_set_text(lbl_digital_title, "COOLANT TEMP");
+            lv_label_set_text(lbl_digital_unit, "\xC2\xB0 C");
             float clt = sens.ms2Online ? sens.ms2.clt_c : sens.tempOutdoor;
-            needleVal = (int32_t)round(clt);
             snprintf(valBuf, sizeof(valBuf), "%d", (int)round(clt));
+            snprintf(limitBuf, sizeof(limitBuf), "WARN LIMIT: > %d \xC2\xB0 C", (int)round(ws.clt_max_c));
             isAlarm = warn.cltAlarm;
             break;
         }
 
         case GaugeType::AFR: {
-            float afr = sens.ms2Online ? sens.ms2.afr : 14.7f;
-            needleVal = (int32_t)round(afr * 10.0f);
+            lv_label_set_text(lbl_digital_title, "AIR / FUEL RATIO");
+            lv_label_set_text(lbl_digital_unit, "AFR");
             if (sens.ms2Online) {
-                snprintf(valBuf, sizeof(valBuf), "%.1f", afr);
+                snprintf(valBuf, sizeof(valBuf), "%.1f", sens.ms2.afr);
             } else {
                 snprintf(valBuf, sizeof(valBuf), "--.-");
             }
+            snprintf(limitBuf, sizeof(limitBuf), "WARN LIMIT: %.1f - %.1f AFR", ws.afr_rich_min, ws.afr_lean_max);
             isAlarm = warn.afrAlarm;
             break;
         }
 
         case GaugeType::INST_FUEL: {
-            float fuel = trip.instant_consumption;
-            needleVal = (int32_t)round(fuel);
-            snprintf(valBuf, sizeof(valBuf), "%.1f", fuel);
-            lv_label_set_text(lbl_gauge_unit, trip.isLitersPerHour ? "L / HOUR" : "L / 100KM");
+            lv_label_set_text(lbl_digital_title, "INSTANT FUEL");
+            lv_label_set_text(lbl_digital_unit, trip.isLitersPerHour ? "L / HOUR" : "L / 100KM");
+            snprintf(valBuf, sizeof(valBuf), "%.1f", trip.instant_consumption);
+            snprintf(limitBuf, sizeof(limitBuf), "THRESHOLD: > 25.0 L");
+            isAlarm = (trip.instant_consumption >= 25.0f && !trip.isLitersPerHour);
             break;
         }
 
         case GaugeType::SPEED: {
-            float spd = trip.current_speed_kmh;
-            needleVal = (int32_t)round(spd);
-            snprintf(valBuf, sizeof(valBuf), "%d", (int)round(spd));
+            lv_label_set_text(lbl_digital_title, "GPS SPEED");
+            lv_label_set_text(lbl_digital_unit, "KM / H");
+            snprintf(valBuf, sizeof(valBuf), "%d", (int)round(trip.current_speed_kmh));
+            snprintf(limitBuf, sizeof(limitBuf), "SPEED LIMIT: > 140 KM/H");
+            isAlarm = (trip.current_speed_kmh >= 140.0f);
             break;
         }
 
         case GaugeType::INTAKE_TEMP: {
+            lv_label_set_text(lbl_digital_title, "INTAKE AIR TEMP");
+            lv_label_set_text(lbl_digital_unit, "\xC2\xB0 C");
             float mat = sens.ms2Online ? sens.ms2.mat_c : sens.tempCabin;
-            needleVal = (int32_t)round(mat);
             snprintf(valBuf, sizeof(valBuf), "%d", (int)round(mat));
+            snprintf(limitBuf, sizeof(limitBuf), "WARN LIMIT: > 55 \xC2\xB0 C");
             isAlarm = (mat >= 55.0f);
             break;
         }
 
         case GaugeType::RPM: {
+            lv_label_set_text(lbl_digital_title, "TACHOMETER");
+            lv_label_set_text(lbl_digital_unit, "RPM");
             uint16_t rpm = sens.ms2Online ? sens.ms2.rpm : 0;
-            needleVal = (int32_t)rpm;
             snprintf(valBuf, sizeof(valBuf), "%d", rpm);
+            snprintf(limitBuf, sizeof(limitBuf), "REDLINE: > 6500 RPM");
             isAlarm = (rpm >= 6500);
             break;
         }
@@ -1494,16 +1139,20 @@ void UiEngine::updateGaugeScreen() {
             break;
     }
 
-    // Резкое стробоскопическое мигание текста при варнинге
-    if (isAlarm && warn.blinkPhase) {
-        lv_obj_set_style_text_color(lbl_gauge_val, COLOR_LV_M_RED, 0);
-    } else {
-        lv_obj_set_style_text_color(lbl_gauge_val, COLOR_LV_WHITE, 0);
-    }
+    lv_label_set_text(lbl_digital_val, valBuf);
+    lv_label_set_text(lbl_digital_warn_limit, limitBuf);
 
-    lv_label_set_text(lbl_gauge_val, valBuf);
-    if (meter_gauge && needle_gauge) {
-        lv_meter_set_indicator_value(meter_gauge, needle_gauge, needleVal);
+    // При аварии/варнинге карточка резко стробирует ярко-красным ///M Red с белой обводкой!
+    applyCardWarning(card_digital_gauge, isAlarm, warn.blinkPhase);
+
+    if (isAlarm && warn.blinkPhase) {
+        lv_obj_set_style_text_color(lbl_digital_val, COLOR_LV_WHITE, 0);
+        lv_obj_set_style_text_color(lbl_digital_title, COLOR_LV_WHITE, 0);
+        lv_obj_set_style_text_color(lbl_digital_warn_limit, COLOR_LV_WHITE, 0);
+    } else {
+        lv_obj_set_style_text_color(lbl_digital_val, isAlarm ? COLOR_LV_M_RED : COLOR_LV_WHITE, 0);
+        lv_obj_set_style_text_color(lbl_digital_title, COLOR_LV_SILVER, 0);
+        lv_obj_set_style_text_color(lbl_digital_warn_limit, isAlarm ? COLOR_LV_M_RED : COLOR_LV_SILVER, 0);
     }
 }
 

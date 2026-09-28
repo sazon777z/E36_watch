@@ -24,9 +24,8 @@ enum class ScreenId {
     OBC_TRIP_FUEL,       // 2
     OBC_TELEMETRY,       // 3
     M_PERFORMANCE,       // 4
-    GAUGE_SELECTOR,      // 5: Селектор/меню приборов
-    SINGLE_GAUGE,        // 6: Полноэкранный прибор (180° арка, шрифт 48)
-    SETTINGS_INFO,       // 7: Настройки и инфо
+    SINGLE_GAUGE,        // 5: Полноэкранный цифровой прибор
+    SETTINGS_INFO,       // 6: Настройки и инфо
     COUNT
 };
 
@@ -86,7 +85,6 @@ private:
     lv_obj_t* scr_trip;
     lv_obj_t* scr_telem;
     lv_obj_t* scr_m_perf;
-    lv_obj_t* scr_gauge_menu;
     lv_obj_t* scr_gauge;
     lv_obj_t* scr_settings;
 
@@ -145,29 +143,15 @@ private:
     lv_obj_t* lbl_gps_sats_4;
     lv_obj_t* lbl_ms2_status_4;
 
-    // Виджеты Экрана 5: Селектор / Меню выбора приборов
-    lv_obj_t* card_menu_preview;
-    lv_obj_t* lbl_menu_count;
-    lv_obj_t* lbl_menu_title;
-    lv_obj_t* lbl_menu_val;
-    lv_obj_t* lbl_menu_unit;
-    lv_obj_t* lbl_menu_hint;
-    lv_obj_t* lbl_gps_sats_menu;
-    lv_obj_t* lbl_ms2_status_menu;
-
-    // Виджеты Экрана 6: Полноэкранный круговой прибор (180° арка)
+    // Виджеты Экрана 5: Полноэкранный цифровой прибор
     GaugeType currentGauge;
-    lv_obj_t* meter_gauge;
-    lv_meter_scale_t* scale_gauge;
-    lv_meter_indicator_t* needle_gauge;
-    lv_meter_indicator_t* arc_warn_gauge;
-    lv_obj_t* lbl_gauge_title;
-    lv_obj_t* lbl_gauge_val;
-    lv_obj_t* lbl_gauge_unit;
-    lv_obj_t* lbl_gps_sats_5;
-    lv_obj_t* lbl_ms2_status_5;
+    lv_obj_t* card_digital_gauge;
+    lv_obj_t* lbl_digital_title;
+    lv_obj_t* lbl_digital_val;
+    lv_obj_t* lbl_digital_unit;
+    lv_obj_t* lbl_digital_warn_limit;
 
-    // Виджеты Экрана 7: Настройки и инфо
+    // Виджеты Экрана 6: Настройки и инфо
     lv_obj_t* lbl_set_ble;
     lv_obj_t* lbl_set_can;
     lv_obj_t* lbl_set_gps;
@@ -178,7 +162,6 @@ private:
     void createScreenTrip();
     void createScreenTelem();
     void createScreenMPerf();
-    void createScreenGaugeMenu();
     void createScreenGauge();
     void createScreenSettings();
 
@@ -187,18 +170,14 @@ private:
     void updateTripScreen();
     void updateTelemScreen();
     void updateMPerfScreen();
-    void updateGaugeMenuScreen();
     void updateGaugeScreen();
     void updateSettingsScreen();
 
-    // Настройка шкалы стрелочного прибора под выбранный датчик
-    void configureGaugeScale(GaugeType type);
     void loadGaugeFromNvs();
     void saveGaugeToNvs();
 
     // Callbacks LVGL
     static void dispFlushCb(lv_disp_drv_t* disp_drv, const lv_area_t* area, lv_color_t* color_p);
-    static void meterDrawPartCb(lv_event_t* e);
 };
 
 extern UiEngine UI;

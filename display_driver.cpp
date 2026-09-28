@@ -8,36 +8,25 @@ DisplayDriver::DisplayDriver()
 
 void DisplayDriver::initBacklightPWM() {
     pinMode(PIN_TFT_BL, OUTPUT);
-    digitalWrite(PIN_TFT_BL, LOW);
+    digitalWrite(PIN_TFT_BL, HIGH);
 
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
     // ESP32 Arduino Core 3.x API
     ledcAttach(PIN_TFT_BL, 5000, 8);
-    ledcWrite(PIN_TFT_BL, 0);
+    ledcWrite(PIN_TFT_BL, DEFAULT_BRIGHTNESS);
 #else
     // ESP32 Arduino Core 2.x API
     ledcSetup(0, 5000, 8);
     ledcAttachPin(PIN_TFT_BL, 0);
-    ledcWrite(0, 0);
+    ledcWrite(0, DEFAULT_BRIGHTNESS);
 #endif
-    currentBrightness = 0;
+    currentBrightness = DEFAULT_BRIGHTNESS;
 }
 
 void DisplayDriver::setBrightness(uint8_t brightness) {
     currentBrightness = brightness;
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
-    if (brightness == 0) {
-        ledcDetach(PIN_TFT_BL);
-        pinMode(PIN_TFT_BL, OUTPUT);
-        digitalWrite(PIN_TFT_BL, LOW);
-    } else if (brightness >= 240) {
-        ledcDetach(PIN_TFT_BL);
-        pinMode(PIN_TFT_BL, OUTPUT);
-        digitalWrite(PIN_TFT_BL, HIGH);
-    } else {
-        ledcAttach(PIN_TFT_BL, 5000, 8);
-        ledcWrite(PIN_TFT_BL, brightness);
-    }
+    ledcWrite(PIN_TFT_BL, brightness);
 #else
     ledcWrite(0, brightness);
 #endif
