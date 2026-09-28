@@ -68,9 +68,13 @@ private:
     // Виджеты Экрана 1: Часы и нижняя телеметрия
     lv_obj_t* lbl_clock;
     lv_obj_t* lbl_gps_sats_1;
+    lv_obj_t* lbl_ms2_status_1;
     lv_obj_t* lbl_boost_val;
+    lv_obj_t* lbl_boost_sub;
     lv_obj_t* lbl_clt_val;
+    lv_obj_t* lbl_clt_sub;
     lv_obj_t* lbl_afr_val;
+    lv_obj_t* lbl_afr_sub;
 
     // Виджеты Экрана 2: Бортовой компьютер и расход
     lv_obj_t* lbl_trip_spd;
@@ -82,6 +86,7 @@ private:
     lv_obj_t* lbl_trip_odo;
     lv_obj_t* lbl_trip_fuel;
     lv_obj_t* lbl_gps_sats_2;
+    lv_obj_t* lbl_ms2_status_2;
 
     // Виджеты Экрана 3: Телеметрия мотора
     lv_obj_t* lbl_telem_volt;
@@ -95,6 +100,7 @@ private:
     lv_obj_t* lbl_telem_boost_txt;
     lv_obj_t* bar_telem_boost;
     lv_obj_t* lbl_gps_sats_3;
+    lv_obj_t* lbl_ms2_status_3;
 
     // Виджеты Экрана 4: ///M Тахометр
     lv_obj_t* lbl_m_rpm;
@@ -103,6 +109,7 @@ private:
     lv_obj_t* lbl_m_adv;
     lv_obj_t* lbl_m_offline;
     lv_obj_t* lbl_gps_sats_4;
+    lv_obj_t* lbl_ms2_status_4;
 
     // Виджеты Экрана 5: Настройки и инфо
     lv_obj_t* lbl_set_ble;
