@@ -239,71 +239,71 @@ void UiEngine::createScreenClock() {
     // Индикатор спутников в правом верхнем углу
     lbl_gps_sats_1 = createGpsCornerLabel(scr_clock);
 
-    // Уменьшенные часы сверху (Montserrat 36 px)
+    // Крупные белые часы (нативный сглаженный 4bpp шрифт 51 px)
     lbl_clock = lv_label_create(scr_clock);
-    lv_obj_set_style_text_font(lbl_clock, &lv_font_montserrat_36, 0);
+    lv_obj_set_style_text_font(lbl_clock, &lv_font_clock_70, 0);
     lv_obj_set_style_text_color(lbl_clock, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_clock, LV_ALIGN_TOP_MID, 0, 16);
+    lv_obj_align(lbl_clock, LV_ALIGN_TOP_MID, 0, 36);
     lv_label_set_text(lbl_clock, "12:34");
 
-    // ПЛИТКА 1: BOOST (x=8, y=66, w=96, h=164)
-    card_boost_1 = createCardTile(scr_clock, 8, 66, 96, 164);
+    // ПЛИТКА 1: BOOST (x=10, y=118, w=94, h=110)
+    card_boost_1 = createCardTile(scr_clock, 10, 118, 94, 110);
     lv_obj_t* t_boost = lv_label_create(card_boost_1);
-    lv_obj_set_style_text_font(t_boost, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(t_boost, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_boost, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_boost, LV_ALIGN_TOP_MID, 0, 6);
+    lv_obj_align(t_boost, LV_ALIGN_TOP_MID, 0, 4);
     lv_label_set_text(t_boost, "BOOST");
 
     lbl_boost_val = lv_label_create(card_boost_1);
-    lv_obj_set_style_text_font(lbl_boost_val, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_font(lbl_boost_val, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_boost_val, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_boost_val, LV_ALIGN_CENTER, 0, -4);
+    lv_obj_align(lbl_boost_val, LV_ALIGN_CENTER, 0, 2);
     lv_label_set_text(lbl_boost_val, "0.00");
 
     lbl_boost_sub = lv_label_create(card_boost_1);
-    lv_obj_set_style_text_font(lbl_boost_sub, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(lbl_boost_sub, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_boost_sub, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_boost_sub, LV_ALIGN_BOTTOM_MID, 0, -8);
+    lv_obj_align(lbl_boost_sub, LV_ALIGN_BOTTOM_MID, 0, -4);
     lv_label_set_text(lbl_boost_sub, "bar");
 
-    // ПЛИТКА 2: COOLANT (x=112, y=66, w=96, h=164)
-    card_clt_1 = createCardTile(scr_clock, 112, 66, 96, 164);
+    // ПЛИТКА 2: COOLANT (x=113, y=118, w=94, h=110)
+    card_clt_1 = createCardTile(scr_clock, 113, 118, 94, 110);
     lv_obj_t* t_clt = lv_label_create(card_clt_1);
-    lv_obj_set_style_text_font(t_clt, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(t_clt, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_clt, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_clt, LV_ALIGN_TOP_MID, 0, 6);
+    lv_obj_align(t_clt, LV_ALIGN_TOP_MID, 0, 4);
     lv_label_set_text(t_clt, "COOLANT");
 
     lbl_clt_val = lv_label_create(card_clt_1);
-    lv_obj_set_style_text_font(lbl_clt_val, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_font(lbl_clt_val, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_clt_val, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_clt_val, LV_ALIGN_CENTER, 0, -4);
+    lv_obj_align(lbl_clt_val, LV_ALIGN_CENTER, 0, 2);
     lv_label_set_text(lbl_clt_val, "20");
 
     lbl_clt_sub = lv_label_create(card_clt_1);
-    lv_obj_set_style_text_font(lbl_clt_sub, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(lbl_clt_sub, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_clt_sub, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_clt_sub, LV_ALIGN_BOTTOM_MID, 0, -8);
+    lv_obj_align(lbl_clt_sub, LV_ALIGN_BOTTOM_MID, 0, -4);
     lv_label_set_text(lbl_clt_sub, "\xC2\xB0 C");
 
-    // ПЛИТКА 3: AFR (x=216, y=66, w=96, h=164)
-    card_afr_1 = createCardTile(scr_clock, 216, 66, 96, 164);
+    // ПЛИТКА 3: AFR (x=216, y=118, w=94, h=110)
+    card_afr_1 = createCardTile(scr_clock, 216, 118, 94, 110);
     lv_obj_t* t_afr = lv_label_create(card_afr_1);
-    lv_obj_set_style_text_font(t_afr, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(t_afr, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_afr, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_afr, LV_ALIGN_TOP_MID, 0, 6);
+    lv_obj_align(t_afr, LV_ALIGN_TOP_MID, 0, 4);
     lv_label_set_text(t_afr, "AFR");
 
     lbl_afr_val = lv_label_create(card_afr_1);
-    lv_obj_set_style_text_font(lbl_afr_val, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_font(lbl_afr_val, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_afr_val, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_afr_val, LV_ALIGN_CENTER, 0, -4);
+    lv_obj_align(lbl_afr_val, LV_ALIGN_CENTER, 0, 2);
     lv_label_set_text(lbl_afr_val, "--.-");
 
     lbl_afr_sub = lv_label_create(card_afr_1);
     lv_obj_set_style_text_font(lbl_afr_sub, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_afr_sub, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_afr_sub, LV_ALIGN_BOTTOM_MID, 0, -8);
+    lv_obj_align(lbl_afr_sub, LV_ALIGN_BOTTOM_MID, 0, -4);
     lv_label_set_text(lbl_afr_sub, "");
 }
 
