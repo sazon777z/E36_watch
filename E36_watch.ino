@@ -146,6 +146,10 @@ void loop() {
             Serial.println("[CMD] Команда 'n' получена! Вызов UI.nextScreen()...");
             UI.nextScreen();
             Serial.println("[CMD] UI.nextScreen() завершен!");
+        } else if (c == 'g' || c == 'G') {
+            Serial.println("[CMD] Команда 'g' получена! Вызов UI.nextGaugeType()...");
+            UI.nextGaugeType();
+            Serial.println("[CMD] UI.nextGaugeType() завершен!");
         } else if (c == 'r' || c == 'R') {
             Serial.println("[CMD] Команда 'r' получена! Сброс одометра поездки...");
             Trip.resetTrip();
@@ -166,6 +170,8 @@ void loop() {
         if (UI.getCurrentScreen() == ScreenId::OBC_TRIP_FUEL) {
             Trip.resetTrip();     // Сброс суточного пробега на экране расхода
             UI.notifyTripReset(); // Визуальное уведомление
+        } else if (UI.getCurrentScreen() == ScreenId::SINGLE_GAUGE) {
+            UI.nextGaugeType();   // Переключение датчика при удержании на экране прибора
         } else {
             Sensors.resetVoltageExtremes(); // Сброс минимального пускового напряжения
         }

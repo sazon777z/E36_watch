@@ -24,7 +24,19 @@ enum class ScreenId {
     OBC_TRIP_FUEL,
     OBC_TELEMETRY,
     M_PERFORMANCE,
+    SINGLE_GAUGE,
     SETTINGS_INFO,
+    COUNT
+};
+
+enum class GaugeType {
+    BOOST = 0,       // Наддув (Бар)
+    COOLANT,         // ОЖ (°C)
+    AFR,             // Смесь ШЛЗ
+    INST_FUEL,       // Мгновенный расход (Л/100км или Л/ч)
+    SPEED,           // Скорость GPS (км/ч)
+    INTAKE_TEMP,     // Впускной воздух IAT (°C)
+    RPM,             // Тахометр (об/мин)
     COUNT
 };
 
@@ -39,6 +51,11 @@ public:
     void nextScreen();
     void setScreen(ScreenId screen);
     ScreenId getCurrentScreen() const { return currentScreen; }
+
+    // Управление полноэкранным аналоговым прибором
+    void setGaugeType(GaugeType type);
+    void nextGaugeType();
+    GaugeType getGaugeType() const { return currentGauge; }
 
     // Заставка загрузки
     void showBootSplash(const char* subtitle = "ON-BOARD COMPUTER");
@@ -68,6 +85,7 @@ private:
     lv_obj_t* scr_trip;
     lv_obj_t* scr_telem;
     lv_obj_t* scr_m_perf;
+    lv_obj_t* scr_gauge;
     lv_obj_t* scr_settings;
 
     // Виджеты Экрана 1: Часы и нижняя телеметрия
@@ -125,7 +143,19 @@ private:
     lv_obj_t* lbl_gps_sats_4;
     lv_obj_t* lbl_ms2_status_4;
 
-    // Виджеты Экрана 5: Настройки и инфо
+    // Виджеты Экрана 5: Полноэкранный круговой прибор (Single Gauge)
+    GaugeType currentGauge;
+    lv_obj_t* meter_gauge;
+    lv_meter_scale_t* scale_gauge;
+    lv_meter_indicator_t* needle_gauge;
+    lv_meter_indicator_t* arc_warn_gauge;
+    lv_obj_t* lbl_gauge_title;
+    lv_obj_t* lbl_gauge_val;
+    lv_obj_t* lbl_gauge_unit;
+    lv_obj_t* lbl_gps_sats_5;
+    lv_obj_t* lbl_ms2_status_5;
+
+    // Виджеты Экрана 6: Настройки и инфо
     lv_obj_t* lbl_set_ble;
     lv_obj_t* lbl_set_can;
     lv_obj_t* lbl_set_gps;
@@ -136,6 +166,7 @@ private:
     void createScreenTrip();
     void createScreenTelem();
     void createScreenMPerf();
+    void createScreenGauge();
     void createScreenSettings();
 
     // Обновление данных
@@ -143,10 +174,17 @@ private:
     void updateTripScreen();
     void updateTelemScreen();
     void updateMPerfScreen();
+    void updateGaugeScreen();
     void updateSettingsScreen();
 
-    // Callback сброса буфера на экран ST7789
+    // Настройка шкалы стрелочного прибора под выбранный датчик
+    void configureGaugeScale(GaugeType type);
+    void loadGaugeFromNvs();
+    void saveGaugeToNvs();
+
+    // Callbacks LVGL
     static void dispFlushCb(lv_disp_drv_t* disp_drv, const lv_area_t* area, lv_color_t* color_p);
+    static void meterDrawPartCb(lv_event_t* e);
 };
 
 extern UiEngine UI;

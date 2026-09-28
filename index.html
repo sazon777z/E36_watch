@@ -390,12 +390,27 @@
             </div>
 
             <div style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic; margin-top: 16px;">ПЕРЕКЛЮЧИТЬ ЭКРАН:</div>
-            <div class="btn-group-screens" style="grid-template-columns: repeat(5, 1fr);">
+            <div class="btn-group-screens" style="grid-template-columns: repeat(6, 1fr);">
                 <button class="btn-screen" onclick="sendCmd('screen 1')">ЧАСЫ</button>
                 <button class="btn-screen" onclick="sendCmd('screen 2')">ТРИП</button>
                 <button class="btn-screen" onclick="sendCmd('screen 3')">МОТОР</button>
                 <button class="btn-screen" onclick="sendCmd('screen 4')">М-ТАХО</button>
-                <button class="btn-screen" onclick="sendCmd('screen 5')">ИНФО</button>
+                <button class="btn-screen" onclick="sendCmd('screen 5')">ПРИБОР</button>
+                <button class="btn-screen" onclick="sendCmd('screen 6')">ИНФО</button>
+            </div>
+
+            <div style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic; margin-top: 16px;">ПОЛНОЭКРАННЫЙ ПРИБОР (GAUGE):</div>
+            <div class="btn-group-screens" style="grid-template-columns: repeat(4, 1fr);">
+                <button class="btn-screen" style="color: #fff; border-color: #444;" onclick="sendCmd('gauge boost')">BOOST</button>
+                <button class="btn-screen" style="color: #fff; border-color: #444;" onclick="sendCmd('gauge clt')">COOLANT</button>
+                <button class="btn-screen" style="color: #fff; border-color: #444;" onclick="sendCmd('gauge afr')">AFR</button>
+                <button class="btn-screen" style="color: #fff; border-color: #444;" onclick="sendCmd('gauge rpm')">ТАХО (RPM)</button>
+            </div>
+            <div class="btn-group-screens" style="grid-template-columns: repeat(4, 1fr); margin-top: 6px;">
+                <button class="btn-screen" style="color: #fff; border-color: #444;" onclick="sendCmd('gauge speed')">SPEED</button>
+                <button class="btn-screen" style="color: #fff; border-color: #444;" onclick="sendCmd('gauge iat')">INTAKE</button>
+                <button class="btn-screen" style="color: #fff; border-color: #444;" onclick="sendCmd('gauge fuel')">РАСХОД</button>
+                <button class="btn-screen" style="color: #00ff66; border-color: #008833;" onclick="sendCmd('nextgauge')">СЛЕД. 🔄</button>
             </div>
         </div>
 

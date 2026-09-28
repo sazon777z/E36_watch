@@ -175,14 +175,44 @@ void BleManager::processCommand(const String& cmd) {
         Serial.printf("[BLE] Установлена яркость: %d\n", br);
     }
     else if (c.startsWith("screen ")) {
-        // Переключение экрана: screen 0..4
+        // Переключение экрана: screen 1..6
         int scr = c.substring(7).toInt();
-        if (scr >= 0 && scr <= 4) {
+        if (scr >= 1 && scr <= 6) {
             UI.setScreen((ScreenId)scr);
             sendString("OK: SCREEN CHANGED\n");
         } else {
-            sendString("ERR: SCREEN 0-4\n");
+            sendString("ERR: SCREEN 1-6\n");
         }
+    }
+    else if (c.startsWith("gauge ")) {
+        // Выбор датчика кругового прибора: gauge <boost|clt|afr|fuel|speed|iat|rpm>
+        String g = c.substring(6);
+        g.trim();
+        g.toLowerCase();
+        GaugeType gt = GaugeType::BOOST;
+        bool ok = true;
+        if (g == "boost" || g == "0") gt = GaugeType::BOOST;
+        else if (g == "clt" || g == "coolant" || g == "1") gt = GaugeType::COOLANT;
+        else if (g == "afr" || g == "2") gt = GaugeType::AFR;
+        else if (g == "fuel" || g == "inst_fuel" || g == "3") gt = GaugeType::INST_FUEL;
+        else if (g == "speed" || g == "spd" || g == "4") gt = GaugeType::SPEED;
+        else if (g == "iat" || g == "intake" || g == "mat" || g == "5") gt = GaugeType::INTAKE_TEMP;
+        else if (g == "rpm" || g == "tacho" || g == "6") gt = GaugeType::RPM;
+        else ok = false;
+
+        if (ok) {
+            UI.setGaugeType(gt);
+            UI.setScreen(ScreenId::SINGLE_GAUGE);
+            sendString("OK: GAUGE CHANGED\n");
+            Serial.printf("[BLE] Выбран датчик прибора: %d (%s)\n", (int)gt, g.c_str());
+        } else {
+            sendString("ERR: GAUGE [boost|clt|afr|fuel|speed|iat|rpm]\n");
+        }
+    }
+    else if (c.equalsIgnoreCase("nextgauge")) {
+        UI.nextGaugeType();
+        UI.setScreen(ScreenId::SINGLE_GAUGE);
+        sendString("OK: NEXT GAUGE\n");
     }
     else if (c.equalsIgnoreCase("resettrip")) {
         Trip.resetTrip();
@@ -278,7 +308,7 @@ void BleManager::processCommand(const String& cmd) {
         sendString(buf);
     }
     else if (c.equalsIgnoreCase("help")) {
-        sendString("CMDS: epoch, time, date, bright, screen, resettrip, setodo, getwarn, setwarn [clt|boost|afrmin|afrmax|en] <val>, status\n");
+        sendString("CMDS: epoch, time, date, bright, screen (1..6), gauge [boost|clt|afr|fuel|speed|iat|rpm], nextgauge, resettrip, setodo, getwarn, setwarn [clt|boost|afrmin|afrmax|en] <val>, status\n");
     }
     else {
         sendString("ERR: UNKNOWN CMD (type 'help')\n");
