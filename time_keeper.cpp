@@ -1,21 +1,60 @@
 #include "time_keeper.h"
 #include <sys/time.h>
+#include <Preferences.h>
 
 TimeKeeper Time;
 
 const char* TimeKeeper::daysRu[7] = { "ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ" };
 const char* TimeKeeper::daysEn[7] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
 
-TimeKeeper::TimeKeeper() : timeSynced(false) {
+TimeKeeper::TimeKeeper() : timeSynced(false), timezoneOffset(DEFAULT_TIMEZONE_OFFSET) {
     memset(&currentTime, 0, sizeof(TimeData));
     currentTime.dayOfWeekStrRu = "ПН";
     currentTime.dayOfWeekStrEn = "MON";
 }
 
 void TimeKeeper::init() {
+    loadTimezoneFromNvs();
     // Начальное время по умолчанию (если нет синхронизации)
     setManualTime(2026, 8, 30, 12, 0, 0);
     update();
+}
+
+void TimeKeeper::loadTimezoneFromNvs() {
+    Preferences prefs;
+    if (prefs.begin("obc_time", true)) {
+        timezoneOffset = prefs.getChar("tz", DEFAULT_TIMEZONE_OFFSET);
+        prefs.end();
+        Serial.printf("[TIME] Загружен часовой пояс из NVS: UTC%+d\n", timezoneOffset);
+    }
+}
+
+void TimeKeeper::saveTimezoneToNvs() {
+    Preferences prefs;
+    if (prefs.begin("obc_time", false)) {
+        prefs.putChar("tz", timezoneOffset);
+        prefs.end();
+        Serial.printf("[TIME] Часовой пояс сохранен в NVS: UTC%+d\n", timezoneOffset);
+    }
+}
+
+void TimeKeeper::setTimezoneOffset(int8_t newOffset) {
+    if (newOffset < -12) newOffset = -12;
+    if (newOffset > 14) newOffset = 14;
+
+    if (newOffset != timezoneOffset) {
+        int8_t diff = newOffset - timezoneOffset;
+        timezoneOffset = newOffset;
+        saveTimezoneToNvs();
+
+        // Сдвигаем текущие часы на разницу поясов
+        time_t now;
+        time(&now);
+        time_t shifted = now + (time_t)diff * 3600;
+        struct timeval tv = { .tv_sec = shifted, .tv_usec = 0 };
+        settimeofday(&tv, NULL);
+        update();
+    }
 }
 
 void TimeKeeper::update() {
@@ -44,7 +83,9 @@ void TimeKeeper::update() {
 }
 
 void TimeKeeper::setEpoch(time_t epoch) {
-    struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
+    // epoch передается как UTC секунды, сдвигаем на текущий часовой пояс
+    time_t local_sec = epoch + (time_t)timezoneOffset * 3600;
+    struct timeval tv = { .tv_sec = local_sec, .tv_usec = 0 };
     settimeofday(&tv, NULL);
     timeSynced = true;
     update();

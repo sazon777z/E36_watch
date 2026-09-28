@@ -161,17 +161,20 @@ void GpsDriver::parseGGA(char* f[], int count) {
 void GpsDriver::syncRtcTime() {
     if (!data.timeValid || data.year < 2024) return;
 
-    // Преобразуем UTC время со спутника с учетом часового пояса
-    int h = data.hour + DEFAULT_TIMEZONE_OFFSET;
+    // Преобразуем UTC время со спутника с учетом текущего часового пояса
+    int tz = Time.getTimezoneOffset();
+    int h = data.hour + tz;
     int d = data.day;
     int m = data.month;
     int y = data.year;
 
-    if (h >= 24) {
+    while (h >= 24) {
         h -= 24;
         d += 1;
-        // Упрощенный переход через границу месяца для типовых месяцев
-        if (d > 30) {
+        int daysInMonth = 31;
+        if (m == 4 || m == 6 || m == 9 || m == 11) daysInMonth = 30;
+        else if (m == 2) daysInMonth = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) ? 29 : 28;
+        if (d > daysInMonth) {
             d = 1;
             m += 1;
             if (m > 12) {
@@ -179,16 +182,20 @@ void GpsDriver::syncRtcTime() {
                 y += 1;
             }
         }
-    } else if (h < 0) {
+    }
+    while (h < 0) {
         h += 24;
         d -= 1;
         if (d < 1) {
-            d = 28;
             m -= 1;
             if (m < 1) {
                 m = 12;
                 y -= 1;
             }
+            int daysInMonth = 31;
+            if (m == 4 || m == 6 || m == 9 || m == 11) daysInMonth = 30;
+            else if (m == 2) daysInMonth = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) ? 29 : 28;
+            d = daysInMonth;
         }
     }
 
@@ -196,6 +203,6 @@ void GpsDriver::syncRtcTime() {
     data.timeSyncedToRtc = true;
     lastRtcSyncMillis = millis();
 
-    Serial.printf("[GPS] Точное время синхронизировано со спутников: %02d:%02d:%02d (%02d.%02d.%04d)\n",
-                  h, data.minute, data.second, d, m, y);
+    Serial.printf("[GPS] Точное время синхронизировано со спутников: %02d:%02d:%02d (UTC%+d, %02d.%02d.%04d)\n",
+                  h, data.minute, data.second, tz, d, m, y);
 }

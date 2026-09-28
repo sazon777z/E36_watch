@@ -592,11 +592,43 @@
 
         <!-- СЕКЦИЯ ЦИФРОВЫХ КАРТОЧЕК И НАСТРОЕК -->
         <div id="digitalSection" style="display: none; flex-direction: column; gap: 16px; width: 100%;">
-            <!-- Синхронизация времени -->
+            <!-- Синхронизация времени и часовой пояс -->
             <div class="card">
-                <div style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic; margin-bottom: 8px;">ВРЕМЯ И СИНХРОНИЗАЦИЯ:</div>
+                <div style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic; margin-bottom: 8px;">ВРЕМЯ И ЧАСОВОЙ ПОЯС:</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;">
+                    <label for="selTimezone" style="font-size: 11px; color: #888; text-transform: uppercase; font-weight: 600;">ЧАСОВОЙ ПОЯС (TIMEZONE):</label>
+                    <select id="selTimezone" class="select-tz" onchange="onTimezoneChange(this.value)" style="width: 100%; background: #151515; color: #fff; border: 1px solid #333; padding: 10px; border-radius: 6px; font-size: 13px; font-weight: 600; outline: none;">
+                        <option value="-12">UTC-12:00 (Линия перемены дат)</option>
+                        <option value="-11">UTC-11:00 (Самоа, Ниуэ)</option>
+                        <option value="-10">UTC-10:00 (Гавайи, Гонолулу)</option>
+                        <option value="-9">UTC-09:00 (Аляска)</option>
+                        <option value="-8">UTC-08:00 (Лос-Анджелес, PST)</option>
+                        <option value="-7">UTC-07:00 (Денвер, MST)</option>
+                        <option value="-6">UTC-06:00 (Чикаго, CST)</option>
+                        <option value="-5">UTC-05:00 (Нью-Йорк, EST)</option>
+                        <option value="-4">UTC-04:00 (Сантьяго, Каракас)</option>
+                        <option value="-3">UTC-03:00 (Буэнос-Айрес, Бразилиа)</option>
+                        <option value="-2">UTC-02:00 (Среднеатлантическое время)</option>
+                        <option value="-1">UTC-01:00 (Кабо-Верде, Азоры)</option>
+                        <option value="0">UTC+00:00 (Гринвич, Лондон, Дублин)</option>
+                        <option value="1">UTC+01:00 (Берлин, Париж, Рим)</option>
+                        <option value="2">UTC+02:00 (Калининград, Киев, Хельсинки)</option>
+                        <option value="3">UTC+03:00 (Москва, Санкт-Петербург, Минск)</option>
+                        <option value="4">UTC+04:00 (Самара, Ижевск, Баку, Тбилиси)</option>
+                        <option value="5" selected>UTC+05:00 (Екатеринбург, Уфа, Пермь, Челябинск)</option>
+                        <option value="6">UTC+06:00 (Омск, Астана, Алматы)</option>
+                        <option value="7">UTC+07:00 (Красноярск, Новосибирск, Барнаул)</option>
+                        <option value="8">UTC+08:00 (Иркутск, Улан-Удэ, Пекин)</option>
+                        <option value="9">UTC+09:00 (Якутск, Чита, Токио)</option>
+                        <option value="10">UTC+10:00 (Владивосток, Хабаровск, Сидней)</option>
+                        <option value="11">UTC+11:00 (Магадан, Южно-Сахалинск)</option>
+                        <option value="12">UTC+12:00 (Камчатка, Окленд)</option>
+                        <option value="13">UTC+13:00 (Тонга)</option>
+                        <option value="14">UTC+14:00 (Кирибати)</option>
+                    </select>
+                </div>
                 <button class="btn" onclick="syncExactTime()">
-                    🕒 Синхронизировать с телефоном
+                    🕒 Синхронизировать время с телефоном
                 </button>
             </div>
 
@@ -1275,6 +1307,7 @@
                 // Запрос текущего статуса и порогов
                 sendCmd('status');
                 setTimeout(() => requestWarnings(), 300);
+                setTimeout(() => sendCmd('gettz'), 500);
             } catch (err) {
                 log('Ошибка: ' + err.message);
                 setConnectedUI(false);
@@ -1357,6 +1390,13 @@
                     if (data.fuel !== undefined) {
                         const el = document.getElementById('valFuel');
                         if (el) el.textContent = data.fuel.toFixed(1);
+                    }
+                    if (data.tz !== undefined) {
+                        const sel = document.getElementById('selTimezone');
+                        if (sel && sel.value !== data.tz.toString()) {
+                            sel.value = data.tz.toString();
+                            localStorage.setItem('bmw_obc_tz', data.tz.toString());
+                        }
                     }
 
                     // Индикация тревоги по варнингам
@@ -1458,10 +1498,34 @@
             log('Отправлены новые пороги варнингов...');
         }
 
+        let savedTz = localStorage.getItem('bmw_obc_tz');
+        if (savedTz === null) {
+            // Автоопределение по часам телефона
+            savedTz = (-Math.round(new Date().getTimezoneOffset() / 60)).toString();
+            localStorage.setItem('bmw_obc_tz', savedTz);
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const sel = document.getElementById('selTimezone');
+            if (sel && savedTz !== null) {
+                sel.value = savedTz;
+            }
+        });
+
+        function onTimezoneChange(val) {
+            localStorage.setItem('bmw_obc_tz', val);
+            sendCmd(`tz ${val}`);
+            log(`Часовой пояс сохранен: UTC${parseInt(val) >= 0 ? '+' : ''}${val}`);
+        }
+
         function syncExactTime() {
+            const sel = document.getElementById('selTimezone');
+            const tz = sel ? sel.value : (localStorage.getItem('bmw_obc_tz') || '5');
+            sendCmd(`tz ${tz}`);
             const now = new Date();
             const epoch = Math.floor(now.getTime() / 1000);
             sendCmd(`epoch ${epoch}`);
+            log(`Синхронизация времени: UTC${parseInt(tz) >= 0 ? '+' : ''}${tz}, epoch ${epoch}`);
         }
 
         let brightTimer = null;

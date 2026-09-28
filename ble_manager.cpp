@@ -106,11 +106,11 @@ void BleManager::update() {
         const TripPeaks& pk = Trip.getPeaks();
         const WarningState& ws = Warnings.getState();
 
-        char jsonBuf[320];
+        char jsonBuf[340];
         snprintf(jsonBuf, sizeof(jsonBuf), 
-                 "{\"rpm\":%d,\"clt\":%.1f,\"boost\":%.2f,\"afr\":%.1f,\"volt\":%.1f,\"spd\":%.1f,\"trip\":%.1f,\"fuel\":%.1f,\"peaks\":{\"rpm\":%d,\"b\":%.2f,\"c\":%.1f,\"a\":%.1f,\"spd\":%.1f,\"f\":%.1f},\"warn\":{\"b\":%d,\"c\":%d,\"a\":%d}}\n",
+                 "{\"rpm\":%d,\"clt\":%.1f,\"boost\":%.2f,\"afr\":%.1f,\"volt\":%.1f,\"spd\":%.1f,\"trip\":%.1f,\"fuel\":%.1f,\"tz\":%d,\"peaks\":{\"rpm\":%d,\"b\":%.2f,\"c\":%.1f,\"a\":%.1f,\"spd\":%.1f,\"f\":%.1f},\"warn\":{\"b\":%d,\"c\":%d,\"a\":%d}}\n",
                  s.ms2.rpm, s.ms2Online ? s.ms2.clt_c : s.tempOutdoor, s.ms2.boost_bar, s.ms2.afr, s.batteryVoltage,
-                 tr.current_speed_kmh, tr.trip_distance_km, tr.instant_consumption,
+                 tr.current_speed_kmh, tr.trip_distance_km, tr.instant_consumption, Time.getTimezoneOffset(),
                  pk.max_rpm, pk.peak_boost_bar, pk.max_clt_c, (pk.min_afr <= 30.0f) ? pk.min_afr : 0.0f, pk.max_speed_kmh, pk.peak_instant_fuel,
                  ws.boostAlarm ? 1 : 0, ws.cltAlarm ? 1 : 0, ws.afrAlarm ? 1 : 0);
 
@@ -129,7 +129,24 @@ void BleManager::processCommand(const String& cmd) {
     String c = cmd;
     c.trim();
 
-    if (c.startsWith("epoch ")) {
+    if (c.startsWith("tz ") || c.startsWith("timezone ")) {
+        int tz = c.substring(c.indexOf(' ') + 1).toInt();
+        if (tz >= -12 && tz <= 14) {
+            Time.setTimezoneOffset((int8_t)tz);
+            char reply[32];
+            snprintf(reply, sizeof(reply), "OK: TZ %d\n", tz);
+            sendString(reply);
+            Serial.printf("[BLE] Установлен часовой пояс: UTC%+d\n", tz);
+        } else {
+            sendString("ERR: INVALID TZ (-12..+14)\n");
+        }
+    }
+    else if (c.equalsIgnoreCase("gettz")) {
+        char reply[32];
+        snprintf(reply, sizeof(reply), "{\"tz\":%d}\n", Time.getTimezoneOffset());
+        sendString(reply);
+    }
+    else if (c.startsWith("epoch ")) {
         // Установка времени по Unix timestamp в секундах
         String valStr = c.substring(6);
         valStr.trim();

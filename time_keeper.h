@@ -32,6 +32,12 @@ public:
     void setTimeOnly(int hour, int minute, int second);
     void setDateOnly(int day, int month, int year);
 
+    // Часовой пояс (с сохранением в NVS)
+    void setTimezoneOffset(int8_t offsetHours);
+    int8_t getTimezoneOffset() const { return timezoneOffset; }
+    void loadTimezoneFromNvs();
+    void saveTimezoneToNvs();
+
     // Текущие данные времени
     const TimeData& getTime() const { return currentTime; }
     bool isTimeSynced() const { return timeSynced; }
@@ -40,6 +46,7 @@ public:
 private:
     TimeData currentTime;
     bool timeSynced;
+    int8_t timezoneOffset; // Например, +3 (Москва), +5 (Екатеринбург/Уфа)
 
     static const char* daysRu[7];
     static const char* daysEn[7];
