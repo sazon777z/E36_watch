@@ -37,14 +37,44 @@
 #include "ui_engine.h"
 #include "ble_manager.h"
 
+#include <esp_system.h>
+
 // Тайминги выполнения задач
 unsigned long lastSensorUpdate = 0;
 unsigned long lastUiUpdate = 0;
 
+static const char* getResetReasonStr(esp_reset_reason_t r) {
+    switch (r) {
+        case ESP_RST_POWERON:   return "POWER ON";
+        case ESP_RST_EXT:       return "RST PIN (EN/RESET)";
+        case ESP_RST_SW:        return "SW RESTART";
+        case ESP_RST_PANIC:     return "PANIC / CRASH";
+        case ESP_RST_INT_WDT:   return "INT WDT";
+        case ESP_RST_TASK_WDT:  return "TASK WDT";
+        case ESP_RST_WDT:       return "OTHER WDT";
+        case ESP_RST_DEEPSLEEP: return "DEEP SLEEP";
+        case ESP_RST_BROWNOUT:   return "BROWNOUT (POWER DIP/SHORT)";
+        case ESP_RST_SDIO:      return "SDIO";
+        case ESP_RST_USB:       return "USB RESET (DTR/UPLOAD)";
+        case ESP_RST_JTAG:      return "JTAG RESET";
+        case ESP_RST_EFUSE:     return "EFUSE ERROR";
+        case ESP_RST_PWR_GLITCH:return "POWER GLITCH";
+        case ESP_RST_CPU_LOCKUP:return "CPU LOCKUP";
+        default:                return "UNKNOWN";
+    }
+}
+
 void setup() {
     Serial.begin(115200);
     delay(200);
-    Serial.println("\n[BMW E36 OBC] Инициализация системы...");
+
+    esp_reset_reason_t rstReason = esp_reset_reason();
+    const char* rstStr = getResetReasonStr(rstReason);
+    Serial.printf("\n==================================================\n");
+    Serial.printf("[BOOT] ПРИЧИНА ЗАГРУЗКИ: %d (%s)\n", (int)rstReason, rstStr);
+    Serial.printf("==================================================\n");
+
+    Serial.println("[BMW E36 OBC] Инициализация системы...");
 
     // 1. Инициализация дисплея ST7789 и аппаратного SPI
     if (!Display.init()) {
@@ -63,8 +93,10 @@ void setup() {
     // 3. Инициализация GPS-модуля NEO-7M (UART1 на GPIO 44/43)
     Gps.init();
 
-    // 4. Отображение фирменной заставки Megasquirt 2
-    UI.showBootSplash("CAN-BUS TELEMETRY");
+    // 4. Отображение заставки с причиной загрузки (RST reason)
+    char splashMsg[64];
+    snprintf(splashMsg, sizeof(splashMsg), "RST: %s", rstStr);
+    UI.showBootSplash(splashMsg);
 
     // 5. Инициализация часов, сенсоров, одометра/расхода, UI и Bluetooth LE
     Time.init();
@@ -104,12 +136,29 @@ void loop() {
         }
     }
 
-    // 6. Обработка нажатий физической кнопки
+    // 6. Обработка команд через Serial (диагностика без физической кнопки)
+    if (Serial.available()) {
+        char c = Serial.read();
+        if (c == 'n' || c == 'N') {
+            Serial.println("[CMD] Команда 'n' получена! Вызов UI.nextScreen()...");
+            UI.nextScreen();
+            Serial.println("[CMD] UI.nextScreen() завершен!");
+        } else if (c == 'r' || c == 'R') {
+            Serial.println("[CMD] Команда 'r' получена! Сброс одометра поездки...");
+            Trip.resetTrip();
+            Serial.println("[CMD] Trip.resetTrip() завершен!");
+        }
+    }
+
+    // 7. Обработка нажатий физической кнопки
     if (Sensors.isNextButtonPressed()) {
+        Serial.println("[BTN] Кнопка нажата! Вызов UI.nextScreen()...");
         UI.nextScreen();      // Переключение на следующий экран в любом режиме
+        Serial.println("[BTN] UI.nextScreen() завершен!");
     }
 
     if (Sensors.isNextButtonHeld()) {
+        Serial.println("[BTN] Кнопка удерживается (>1.2 сек)!");
         if (UI.getCurrentScreen() == ScreenId::OBC_TRIP_FUEL) {
             Trip.resetTrip();     // Сброс суточного пробега на экране расхода
         } else {

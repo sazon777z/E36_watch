@@ -16,7 +16,8 @@
 
 // Дополнительные входы/выходы (при необходимости)
 #define PIN_VOLTAGE_ADC   -1  // Отключен (напряжение читается по CAN из MS2; GPIO 7 занят под CAN_RX)
-#define PIN_BTN_NEXT      14  // Кнопка переключения экранов (с подтяжкой к VCC/GND)
+#define PIN_BTN_NEXT      14  // Внешняя кнопка переключения экранов (GPIO 14 к GND)
+#define PIN_BTN_BOOT      0   // Встроенная кнопка BOOT на плате ESP32-S3 (GPIO 0 к GND)
 #define PIN_ONEWIRE_TEMP  15  // Шина 1-Wire для датчика температуры DS18B20
 #define PIN_ILLUMINATION  16  // Вход сигнала габаритов/фар (для авто-диммирования)
 

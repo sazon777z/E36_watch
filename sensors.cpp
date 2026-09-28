@@ -23,6 +23,7 @@ void SensorsManager::init() {
         filteredAdcRaw = analogRead(PIN_VOLTAGE_ADC);
     }
     pinMode(PIN_BTN_NEXT, INPUT_PULLUP);
+    pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
     pinMode(PIN_ILLUMINATION, INPUT_PULLDOWN);
 
     updateBatteryVoltage();
@@ -102,7 +103,9 @@ void SensorsManager::resetVoltageExtremes() {
 }
 
 bool SensorsManager::isNextButtonPressed() {
-    int btn = digitalRead(PIN_BTN_NEXT);
+    int b14 = digitalRead(PIN_BTN_NEXT);
+    int b0 = digitalRead(PIN_BTN_BOOT);
+    int btn = (b14 == LOW || b0 == LOW) ? LOW : HIGH;
     bool pressedEvent = false;
 
     if (btn == LOW && lastBtnState == HIGH) {
@@ -110,9 +113,13 @@ bool SensorsManager::isNextButtonPressed() {
         btnPressTime = millis();
         btnHandledShort = false;
         btnHandledLong = false;
+        Serial.printf("[BTN] Нажата кнопка! Источник: %s (GPIO14=%d, GPIO0=%d)\n",
+                      (b14 == LOW && b0 == LOW) ? "GPIO14 + GPIO0" : (b14 == LOW ? "GPIO14" : "BOOT(GPIO0)"),
+                      b14, b0);
     } else if (btn == HIGH && lastBtnState == LOW) {
         // Отпускание кнопки
         unsigned long duration = millis() - btnPressTime;
+        Serial.printf("[BTN] Кнопка отпущена, длительность: %lu мс\n", duration);
         if (duration >= 50 && duration < 800 && !btnHandledShort && !btnHandledLong) {
             pressedEvent = true;
             btnHandledShort = true;
@@ -124,7 +131,10 @@ bool SensorsManager::isNextButtonPressed() {
 }
 
 bool SensorsManager::isNextButtonHeld() {
-    int btn = digitalRead(PIN_BTN_NEXT);
+    int b14 = digitalRead(PIN_BTN_NEXT);
+    int b0 = digitalRead(PIN_BTN_BOOT);
+    int btn = (b14 == LOW || b0 == LOW) ? LOW : HIGH;
+
     if (btn == LOW && !btnHandledLong) {
         if (millis() - btnPressTime > 1200) {
             btnHandledLong = true;

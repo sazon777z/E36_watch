@@ -515,13 +515,22 @@ void UiEngine::showBootSplash(const char* subtitle) {
     // Лаконичная заставка Megasquirt 2
     tft.setFont(&FreeSansBoldOblique12pt7b);
     tft.setTextColor(0xFFFF);
-    tft.setCursor(68, 110);
+    tft.setCursor(68, 105);
     tft.print("Megasquirt 2");
-    tft.drawFastHLine(48, 126, 224, 0x4208);
+    tft.drawFastHLine(48, 120, 224, 0x4208);
     tft.setFont();
 
+    if (subtitle && subtitle[0]) {
+        tft.setTextColor(0xAD55); // серый цвет
+        tft.setTextSize(1);
+        int16_t x = 160 - (strlen(subtitle) * 6) / 2;
+        if (x < 10) x = 10;
+        tft.setCursor(x, 132);
+        tft.print(subtitle);
+    }
+
     Display.fadeIn(DEFAULT_BRIGHTNESS, 4);
-    delay(700);
+    delay(900);
     Display.fadeOut(3);
 
     tft.fillScreen(0x0000);
@@ -667,7 +676,9 @@ void UiEngine::updateTripScreen() {
     }
 
     // Мгновенный расход
-    lv_label_set_text_fmt(lbl_trip_inst, "%.1f %s", trip.instant_consumption, trip.isLitersPerHour ? "L/H" : "L");
+    char instBuf[32];
+    snprintf(instBuf, sizeof(instBuf), "%.1f %s", trip.instant_consumption, trip.isLitersPerHour ? "L/H" : "L");
+    lv_label_set_text(lbl_trip_inst, instBuf);
 
     // 4 Квадранта
     lv_label_set_text_fmt(lbl_trip_dist, "%.1f km", trip.trip_distance_km);
