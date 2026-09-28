@@ -1161,11 +1161,8 @@ void UiEngine::createScreenGauge() {
     lv_obj_set_style_bg_color(scr_gauge, COLOR_LV_BLACK, 0);
     lv_obj_clear_flag(scr_gauge, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Статус MegaSquirt 2 в верхнем левом углу
-    lbl_ms2_status_5 = createMs2StatusLabel(scr_gauge);
-
-    // Индикатор спутников в правом верхнем углу
-    lbl_gps_sats_5 = createGpsCornerLabel(scr_gauge);
+    lbl_ms2_status_5 = nullptr;
+    lbl_gps_sats_5 = nullptr;
 
     // Центральные текстовые метки (располагаем в нижней свободной зоне под аркой)
     lbl_gauge_title = lv_label_create(scr_gauge);
@@ -1427,20 +1424,6 @@ void UiEngine::updateGaugeScreen() {
     const TripData& trip = Trip.getData();
     const GpsData& gps = Gps.getData();
     const WarningState& warn = Warnings.getState();
-
-    // Угловые индикаторы MS2 и GPS
-    updateMs2StatusWidget(lbl_ms2_status_5, sens.ms2Online);
-    if (gps.hasFix) {
-        lv_obj_set_style_text_color(lbl_gps_sats_5, COLOR_LV_WHITE, 0);
-        lv_label_set_text_fmt(lbl_gps_sats_5, LV_SYMBOL_GPS " %d", gps.satellites);
-    } else {
-        lv_obj_set_style_text_color(lbl_gps_sats_5, COLOR_LV_MID_GRAY, 0);
-        if (gps.satellites > 0) {
-            lv_label_set_text_fmt(lbl_gps_sats_5, LV_SYMBOL_GPS " %d", gps.satellites);
-        } else {
-            lv_label_set_text(lbl_gps_sats_5, LV_SYMBOL_GPS " --");
-        }
-    }
 
     int32_t needleVal = 0;
     char valBuf[32] = {0};
