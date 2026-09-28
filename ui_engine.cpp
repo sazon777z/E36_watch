@@ -1011,36 +1011,38 @@ void UiEngine::createScreenGauge() {
     lbl_digital_title = lv_label_create(card_digital_gauge);
     lv_obj_set_style_text_font(lbl_digital_title, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(lbl_digital_title, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_digital_title, LV_ALIGN_TOP_MID, 0, 8);
+    lv_obj_align(lbl_digital_title, LV_ALIGN_TOP_MID, 0, 6);
     lv_label_set_text(lbl_digital_title, "BOOST / TURBO");
 
-    // По центру: Максимально крупное цифровое значение (нативный 4bpp шрифт 70 px)
+    // По центру: Максимально крупное цифровое значение (нативный 4bpp шрифт 96 px)
     lbl_digital_val = lv_label_create(card_digital_gauge);
-    lv_obj_set_style_text_font(lbl_digital_val, &lv_font_clock_70, 0);
+    lv_obj_set_style_text_font(lbl_digital_val, &lv_font_clock_96, 0);
     lv_obj_set_style_text_color(lbl_digital_val, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_digital_val, LV_ALIGN_CENTER, 0, -14);
+    lv_obj_align(lbl_digital_val, LV_ALIGN_CENTER, 0, -10);
     lv_label_set_text(lbl_digital_val, "0.00");
 
     // Под цифрами: Единица измерения
     lbl_digital_unit = lv_label_create(card_digital_gauge);
     lv_obj_set_style_text_font(lbl_digital_unit, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(lbl_digital_unit, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_digital_unit, LV_ALIGN_CENTER, 0, 34);
+    lv_obj_align(lbl_digital_unit, LV_ALIGN_CENTER, 0, 42);
     lv_label_set_text(lbl_digital_unit, "BAR");
 
-    // Пиковое значение за поездку (BMW Amber / Янтарный)
+    // Внизу слева: Пиковое значение за поездку (BMW Amber / Янтарный)
     lbl_digital_peak = lv_label_create(card_digital_gauge);
-    lv_obj_set_style_text_font(lbl_digital_peak, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(lbl_digital_peak, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_digital_peak, lv_color_make(255, 170, 0), 0);
-    lv_obj_align(lbl_digital_peak, LV_ALIGN_CENTER, 0, 60);
-    lv_label_set_text(lbl_digital_peak, "PEAK: 0.00 BAR");
+    lv_obj_align(lbl_digital_peak, LV_ALIGN_BOTTOM_LEFT, 8, -6);
+    lv_obj_set_style_text_align(lbl_digital_peak, LV_TEXT_ALIGN_LEFT, 0);
+    lv_label_set_text(lbl_digital_peak, "PK: +0.00b");
 
-    // Внизу: Сохраненные лимиты варнингов для данного прибора
+    // Внизу справа: Сохраненные лимиты варнингов для данного прибора
     lbl_digital_warn_limit = lv_label_create(card_digital_gauge);
     lv_obj_set_style_text_font(lbl_digital_warn_limit, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_digital_warn_limit, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_digital_warn_limit, LV_ALIGN_BOTTOM_MID, 0, -6);
-    lv_label_set_text(lbl_digital_warn_limit, "WARN LIMIT: > 1.20 BAR");
+    lv_obj_align(lbl_digital_warn_limit, LV_ALIGN_BOTTOM_RIGHT, -8, -6);
+    lv_obj_set_style_text_align(lbl_digital_warn_limit, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_text(lbl_digital_warn_limit, "LIM: >1.20b");
 }
 
 void UiEngine::setGaugeType(GaugeType type) {
@@ -1079,8 +1081,8 @@ void UiEngine::updateGaugeScreen() {
             lv_label_set_text(lbl_digital_unit, "BAR");
             float b = sens.ms2Online ? sens.ms2.boost_bar : 0.0f;
             snprintf(valBuf, sizeof(valBuf), "%+.2f", b);
-            snprintf(peakBuf, sizeof(peakBuf), "PEAK: %+.2f BAR", peaks.peak_boost_bar);
-            snprintf(limitBuf, sizeof(limitBuf), "WARN LIMIT: > %.2f BAR", ws.boost_max_bar);
+            snprintf(peakBuf, sizeof(peakBuf), "PK: %+.2fb", peaks.peak_boost_bar);
+            snprintf(limitBuf, sizeof(limitBuf), "LIM: >%.2fb", ws.boost_max_bar);
             isAlarm = warn.boostAlarm;
             break;
         }
@@ -1090,8 +1092,8 @@ void UiEngine::updateGaugeScreen() {
             lv_label_set_text(lbl_digital_unit, "\xC2\xB0 C");
             float clt = sens.ms2Online ? sens.ms2.clt_c : sens.tempOutdoor;
             snprintf(valBuf, sizeof(valBuf), "%d", (int)round(clt));
-            snprintf(peakBuf, sizeof(peakBuf), "PEAK: %d \xC2\xB0 C", (int)round(peaks.max_clt_c));
-            snprintf(limitBuf, sizeof(limitBuf), "WARN LIMIT: > %d \xC2\xB0 C", (int)round(ws.clt_max_c));
+            snprintf(peakBuf, sizeof(peakBuf), "PK: %d\xC2\xB0 C", (int)round(peaks.max_clt_c));
+            snprintf(limitBuf, sizeof(limitBuf), "LIM: >%d\xC2\xB0 C", (int)round(ws.clt_max_c));
             isAlarm = warn.cltAlarm;
             break;
         }
@@ -1105,11 +1107,11 @@ void UiEngine::updateGaugeScreen() {
                 snprintf(valBuf, sizeof(valBuf), "--.-");
             }
             if (peaks.min_afr <= 30.0f && peaks.max_afr >= 5.0f) {
-                snprintf(peakBuf, sizeof(peakBuf), "PEAK: %.1f / %.1f AFR", peaks.min_afr, peaks.max_afr);
+                snprintf(peakBuf, sizeof(peakBuf), "PK: %.1f/%.1f", peaks.min_afr, peaks.max_afr);
             } else {
-                snprintf(peakBuf, sizeof(peakBuf), "PEAK: --.- AFR");
+                snprintf(peakBuf, sizeof(peakBuf), "PK: --.-");
             }
-            snprintf(limitBuf, sizeof(limitBuf), "WARN LIMIT: %.1f - %.1f AFR", ws.afr_rich_min, ws.afr_lean_max);
+            snprintf(limitBuf, sizeof(limitBuf), "LIM: %.1f-%.1f", ws.afr_rich_min, ws.afr_lean_max);
             isAlarm = warn.afrAlarm;
             break;
         }
@@ -1118,8 +1120,8 @@ void UiEngine::updateGaugeScreen() {
             lv_label_set_text(lbl_digital_title, "INSTANT FUEL");
             lv_label_set_text(lbl_digital_unit, trip.isLitersPerHour ? "L / HOUR" : "L / 100KM");
             snprintf(valBuf, sizeof(valBuf), "%.1f", trip.instant_consumption);
-            snprintf(peakBuf, sizeof(peakBuf), "PEAK: %.1f L/100", peaks.peak_instant_fuel);
-            snprintf(limitBuf, sizeof(limitBuf), "THRESHOLD: > 25.0 L");
+            snprintf(peakBuf, sizeof(peakBuf), "PK: %.1f L", peaks.peak_instant_fuel);
+            snprintf(limitBuf, sizeof(limitBuf), "LIM: >25.0 L");
             isAlarm = (trip.instant_consumption >= 25.0f && !trip.isLitersPerHour);
             break;
         }
@@ -1128,8 +1130,8 @@ void UiEngine::updateGaugeScreen() {
             lv_label_set_text(lbl_digital_title, "GPS SPEED");
             lv_label_set_text(lbl_digital_unit, "KM / H");
             snprintf(valBuf, sizeof(valBuf), "%d", (int)round(trip.current_speed_kmh));
-            snprintf(peakBuf, sizeof(peakBuf), "MAX SPD: %d KM/H", (int)round(peaks.max_speed_kmh));
-            snprintf(limitBuf, sizeof(limitBuf), "SPEED LIMIT: > 140 KM/H");
+            snprintf(peakBuf, sizeof(peakBuf), "MAX: %d KM/H", (int)round(peaks.max_speed_kmh));
+            snprintf(limitBuf, sizeof(limitBuf), "LIM: >140");
             isAlarm = (trip.current_speed_kmh >= 140.0f);
             break;
         }
@@ -1139,8 +1141,8 @@ void UiEngine::updateGaugeScreen() {
             lv_label_set_text(lbl_digital_unit, "\xC2\xB0 C");
             float mat = sens.ms2Online ? sens.ms2.mat_c : sens.tempCabin;
             snprintf(valBuf, sizeof(valBuf), "%d", (int)round(mat));
-            snprintf(peakBuf, sizeof(peakBuf), "PEAK: %d \xC2\xB0 C", (int)round(peaks.max_iat_c));
-            snprintf(limitBuf, sizeof(limitBuf), "WARN LIMIT: > 55 \xC2\xB0 C");
+            snprintf(peakBuf, sizeof(peakBuf), "PK: %d\xC2\xB0 C", (int)round(peaks.max_iat_c));
+            snprintf(limitBuf, sizeof(limitBuf), "LIM: >55\xC2\xB0 C");
             isAlarm = (mat >= 55.0f);
             break;
         }
@@ -1150,8 +1152,8 @@ void UiEngine::updateGaugeScreen() {
             lv_label_set_text(lbl_digital_unit, "RPM");
             uint16_t rpm = sens.ms2Online ? sens.ms2.rpm : 0;
             snprintf(valBuf, sizeof(valBuf), "%d", rpm);
-            snprintf(peakBuf, sizeof(peakBuf), "PEAK: %d RPM", peaks.max_rpm);
-            snprintf(limitBuf, sizeof(limitBuf), "REDLINE: > 6500 RPM");
+            snprintf(peakBuf, sizeof(peakBuf), "PK: %d RPM", peaks.max_rpm);
+            snprintf(limitBuf, sizeof(limitBuf), "REDLINE: >6500");
             isAlarm = (rpm >= 6500);
             break;
         }

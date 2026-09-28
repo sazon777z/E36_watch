@@ -15,6 +15,7 @@
 // Объявления кастомных 4bpp сглаженных шрифтов
 extern "C" {
     extern const lv_font_t lv_font_clock_70;
+    extern const lv_font_t lv_font_clock_96;
     extern const lv_font_t lv_font_telemetry_24;
 }
 
