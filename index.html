@@ -250,17 +250,242 @@
             border-color: #0066ff;
         }
 
-        .log-box {
-            background: #050505;
-            border: 1px solid #1a1a1a;
-            border-radius: 4px;
-            padding: 8px;
-            font-family: monospace;
+        /* Вкладки переключения вида */
+        .view-tabs {
+            display: flex;
+            width: 100%;
+            background: #111;
+            border-radius: 8px;
+            padding: 4px;
+            border: 1px solid var(--border-color);
+            gap: 4px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 10px 8px;
+            border: none;
+            background: transparent;
+            color: var(--text-silver);
+            font-size: 12px;
+            font-weight: 700;
+            font-style: italic;
+            border-radius: 6px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn.active {
+            background: #222;
+            color: var(--text-white);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+            border: 1px solid #444;
+        }
+
+        /* Сетка стрелочных приборов */
+        .gauges-container {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            width: 100%;
+        }
+
+        .gauge-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            user-select: none;
+        }
+
+        .gauge-card:hover {
+            border-color: #444;
+            transform: translateY(-2px);
+        }
+
+        .gauge-card:active {
+            transform: scale(0.98);
+        }
+
+        .gauge-card.alarm {
+            border-color: #ff2222;
+            box-shadow: 0 0 16px rgba(255, 34, 34, 0.4);
+            animation: pulse-alarm 1s infinite alternate;
+        }
+
+        @keyframes pulse-alarm {
+            from { box-shadow: 0 0 10px rgba(255, 34, 34, 0.3); }
+            to { box-shadow: 0 0 25px rgba(255, 34, 34, 0.8); }
+        }
+
+        .gauge-card-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+            padding: 0 4px;
+        }
+
+        .gauge-title {
+            font-size: 13px;
+            font-weight: 800;
+            font-style: italic;
+            color: var(--text-silver);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .gauge-expand-btn {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #aaa;
             font-size: 11px;
-            color: #888;
-            max-height: 80px;
-            overflow-y: auto;
-            white-space: pre-wrap;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .gauge-canvas {
+            display: block;
+            width: 100%;
+            max-width: 280px;
+            aspect-ratio: 1;
+            margin: 0 auto;
+        }
+
+        .gauge-card-footer {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            padding: 0 6px;
+            font-size: 11px;
+            color: #777;
+        }
+
+        .gauge-peak-badge {
+            color: #ffa000;
+            font-weight: 700;
+        }
+
+        /* Полноэкранный режим прибора */
+        .gauge-fs-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            z-index: 10000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            box-sizing: border-box;
+            touch-action: pan-y pinch-zoom;
+        }
+
+        .gauge-fs-overlay.active {
+            display: flex;
+        }
+
+        .fs-header {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10001;
+        }
+
+        .fs-title {
+            font-size: 16px;
+            font-weight: 800;
+            font-style: italic;
+            color: #fff;
+            letter-spacing: 1.5px;
+            text-align: center;
+            flex: 1;
+        }
+
+        .fs-btn {
+            background: #151515;
+            border: 1px solid #333;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 700;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .fs-btn:active {
+            background: #333;
+        }
+
+        .fs-canvas-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            max-height: calc(100vh - 120px);
+            position: relative;
+        }
+
+        #fsGaugeCanvas {
+            max-width: 95vw;
+            max-height: calc(100vh - 140px);
+            aspect-ratio: 1;
+            display: block;
+        }
+
+        .fs-footer {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            z-index: 10001;
+        }
+
+        .fs-peak-bar {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            background: #0d0d0d;
+            border: 1px solid #222;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .fs-nav-row {
+            display: flex;
+            gap: 12px;
+            width: 100%;
+            justify-content: center;
+            margin-top: 4px;
         }
     </style>
 </head>
@@ -291,16 +516,92 @@
             </button>
         </div>
 
-        <!-- Синхронизация времени -->
-        <div class="card">
-            <div style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic; margin-bottom: 8px;">ВРЕМЯ И СИНХРОНИЗАЦИЯ:</div>
-            <button class="btn" onclick="syncExactTime()">
-                🕒 Синхронизировать с телефоном
-            </button>
+        <!-- Переключатель видов интерфейса -->
+        <div class="view-tabs">
+            <button class="tab-btn active" id="tabGaugesBtn" onclick="switchView('gauges')">🎯 СТРЕЛОЧНЫЕ ПРИБОРЫ</button>
+            <button class="tab-btn" id="tabDigitalBtn" onclick="switchView('digital')">📊 ЦИФРОВЫЕ КАРТОЧКИ</button>
         </div>
 
-        <!-- Живая телеметрия MegaSquirt 2 -->
-        <div class="card">
+        <!-- СЕКЦИЯ СТРЕЛОЧНЫХ ПРИБОРОВ ///M -->
+        <div id="gaugesSection" class="gauges-container">
+            <!-- 1. НАДДУВ (BOOST) -->
+            <div class="gauge-card" id="cardGaugeBoost" onclick="openFullscreenGauge('boost')">
+                <div class="gauge-card-header">
+                    <span class="gauge-title">///M BOOST / TURBO</span>
+                    <span class="gauge-expand-btn">⛶ НА ВЕСЬ ЭКРАН</span>
+                </div>
+                <canvas id="canvasGaugeBoost" class="gauge-canvas" width="280" height="280"></canvas>
+                <div class="gauge-card-footer">
+                    <span>ПИК: <b id="footPeakBoost" class="gauge-peak-badge">0.00 BAR</b></span>
+                    <span id="footWarnBoost">ЛИМИТ: > 1.20b</span>
+                </div>
+            </div>
+
+            <!-- 2. ТАХОМЕТР (RPM) -->
+            <div class="gauge-card" id="cardGaugeRpm" onclick="openFullscreenGauge('rpm')">
+                <div class="gauge-card-header">
+                    <span class="gauge-title">///M TACHOMETER</span>
+                    <span class="gauge-expand-btn">⛶ НА ВЕСЬ ЭКРАН</span>
+                </div>
+                <canvas id="canvasGaugeRpm" class="gauge-canvas" width="280" height="280"></canvas>
+                <div class="gauge-card-footer">
+                    <span>ПИК: <b id="footPeakRpm" class="gauge-peak-badge">0 RPM</b></span>
+                    <span>ОТСЕЧКА: 6500</span>
+                </div>
+            </div>
+
+            <!-- 3. ТЕМПЕРАТУРА ОЖ (COOLANT) -->
+            <div class="gauge-card" id="cardGaugeClt" onclick="openFullscreenGauge('clt')">
+                <div class="gauge-card-header">
+                    <span class="gauge-title">COOLANT TEMP</span>
+                    <span class="gauge-expand-btn">⛶ НА ВЕСЬ ЭКРАН</span>
+                </div>
+                <canvas id="canvasGaugeClt" class="gauge-canvas" width="280" height="280"></canvas>
+                <div class="gauge-card-footer">
+                    <span>ПИК: <b id="footPeakClt" class="gauge-peak-badge">-- °C</b></span>
+                    <span id="footWarnClt">ЛИМИТ: > 100°C</span>
+                </div>
+            </div>
+
+            <!-- 4. СМЕСЬ (AFR) -->
+            <div class="gauge-card" id="cardGaugeAfr" onclick="openFullscreenGauge('afr')">
+                <div class="gauge-card-header">
+                    <span class="gauge-title">AIR / FUEL RATIO</span>
+                    <span class="gauge-expand-btn">⛶ НА ВЕСЬ ЭКРАН</span>
+                </div>
+                <canvas id="canvasGaugeAfr" class="gauge-canvas" width="280" height="280"></canvas>
+                <div class="gauge-card-footer">
+                    <span>ПИК: <b id="footPeakAfr" class="gauge-peak-badge">--.-</b></span>
+                    <span id="footWarnAfr">ЗОНА: 10.5-15.5</span>
+                </div>
+            </div>
+
+            <!-- 5. СКОРОСТЬ GPS (SPEED) -->
+            <div class="gauge-card" id="cardGaugeSpeed" onclick="openFullscreenGauge('speed')">
+                <div class="gauge-card-header">
+                    <span class="gauge-title">GPS SPEED</span>
+                    <span class="gauge-expand-btn">⛶ НА ВЕСЬ ЭКРАН</span>
+                </div>
+                <canvas id="canvasGaugeSpeed" class="gauge-canvas" width="280" height="280"></canvas>
+                <div class="gauge-card-footer">
+                    <span>МАКС: <b id="footPeakSpd" class="gauge-peak-badge">0 KM/H</b></span>
+                    <span>GPS 3D FIX</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- СЕКЦИЯ ЦИФРОВЫХ КАРТОЧЕК И НАСТРОЕК -->
+        <div id="digitalSection" style="display: none; flex-direction: column; gap: 16px; width: 100%;">
+            <!-- Синхронизация времени -->
+            <div class="card">
+                <div style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic; margin-bottom: 8px;">ВРЕМЯ И СИНХРОНИЗАЦИЯ:</div>
+                <button class="btn" onclick="syncExactTime()">
+                    🕒 Синхронизировать с телефоном
+                </button>
+            </div>
+
+            <!-- Живая телеметрия MegaSquirt 2 -->
+            <div class="card">
             <div style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic; margin-bottom: 10px;">ТЕЛЕМЕТРИЯ MEGASQUIRT 2:</div>
             <div class="grid-3">
                 <div class="tele-card">
@@ -429,12 +730,506 @@
                 <button class="btn-screen" style="color: #00ff66; border-color: #008833;" onclick="sendCmd('nextgauge')">СЛЕД. 🔄</button>
             </div>
         </div>
+        </div> <!-- Конец digitalSection -->
 
         <!-- Консоль логов -->
         <div class="log-box" id="logBox">Готов к подключению через Web Bluetooth (Chrome / Edge)...</div>
+    </div> <!-- Конец .container -->
+
+    <!-- ПОЛНОЭКРАННЫЙ РЕЖИМ ПРИБОРА -->
+    <div id="gaugeFsOverlay" class="gauge-fs-overlay">
+        <div class="fs-header">
+            <button class="fs-btn" onclick="prevFsGauge(event)">◀ ПРЕД</button>
+            <div class="fs-title" id="fsGaugeTitle">///M BOOST / TURBO</div>
+            <div style="display: flex; gap: 6px;">
+                <button class="fs-btn" onclick="toggleBrowserFullscreen(event)" title="Во весь экран">⛶</button>
+                <button class="fs-btn" style="background: #2a1010; color: #ff5555; border-color: #552222;" onclick="closeFullscreenGauge(event)">✕</button>
+            </div>
+        </div>
+
+        <div class="fs-canvas-wrapper" onclick="toggleFsNext(event)">
+            <canvas id="fsGaugeCanvas" width="380" height="380"></canvas>
+        </div>
+
+        <div class="fs-footer">
+            <div class="fs-peak-bar">
+                <span>ПИК ЗА ПОЕЗДКУ: <b id="fsPeakVal" style="color: #ffa000;">+0.00 BAR</b></span>
+                <span id="fsWarnLimit">ЛИМИТ: > 1.20 BAR</span>
+            </div>
+            <div class="fs-nav-row">
+                <button class="fs-btn" style="flex: 1;" onclick="prevFsGauge(event)">◀ Предыдущий</button>
+                <button class="fs-btn" style="flex: 1;" onclick="nextFsGauge(event)">Следующий ▶</button>
+            </div>
+            <div style="font-size: 11px; color: #666; margin-top: 2px;">
+                Тап по прибору — следующий | Свайп влево/вправо | ✕ — закрыть
+            </div>
+        </div>
     </div>
 
     <script>
+        // -------------------------------------------------------------
+        // УПРАВЛЕНИЕ ВИДАМИ (ТАБЫ)
+        // -------------------------------------------------------------
+        let currentView = 'gauges'; // по умолчанию стрелочные приборы
+
+        function switchView(viewName) {
+            currentView = viewName;
+            const tabGauges = document.getElementById('tabGaugesBtn');
+            const tabDigital = document.getElementById('tabDigitalBtn');
+            const secGauges = document.getElementById('gaugesSection');
+            const secDigital = document.getElementById('digitalSection');
+
+            if (viewName === 'gauges') {
+                tabGauges.classList.add('active');
+                tabDigital.classList.remove('active');
+                secGauges.style.display = 'flex';
+                secDigital.style.display = 'none';
+            } else {
+                tabDigital.classList.add('active');
+                tabGauges.classList.remove('active');
+                secDigital.style.display = 'flex';
+                secGauges.style.display = 'none';
+            }
+        }
+
+        // -------------------------------------------------------------
+        // СТРЕЛОЧНЫЕ ПРИБОРЫ (CANVAS 2D И ПЛАВНАЯ АНИМАЦИЯ 60 FPS)
+        // -------------------------------------------------------------
+        const GAUGE_KEYS = ['boost', 'rpm', 'clt', 'afr', 'speed'];
+        let currentFsGaugeIndex = 0;
+        let isFsOpen = false;
+
+        const GAUGE_CONFIGS = {
+            boost: {
+                id: 'boost',
+                title: '///M BOOST / TURBO',
+                unit: 'BAR',
+                min: -1.0,
+                max: 2.0,
+                startAngle: 135 * (Math.PI / 180),
+                endAngle: 405 * (Math.PI / 180),
+                majorStep: 0.5,
+                minorCount: 4,
+                decimals: 2,
+                formatVal: (v) => (v >= 0 ? '+' : '') + v.toFixed(2),
+                zones: [
+                    { from: -1.0, to: 0.0, color: '#00b0ff' }, // вакуум
+                    { from: 0.0, to: 1.2, color: '#ffffff' },  // наддув
+                    { from: 1.2, to: 2.0, color: '#ff2222' }   // овербуст
+                ]
+            },
+            rpm: {
+                id: 'rpm',
+                title: '///M TACHOMETER',
+                unit: 'RPM x1000',
+                min: 0,
+                max: 8000,
+                startAngle: 135 * (Math.PI / 180),
+                endAngle: 405 * (Math.PI / 180),
+                majorStep: 1000,
+                minorCount: 4,
+                decimals: 0,
+                scaleDiv: 1000,
+                formatVal: (v) => Math.round(v).toString(),
+                zones: [
+                    { from: 0, to: 6500, color: '#ffffff' },
+                    { from: 6500, to: 8000, color: '#ff2222' }
+                ]
+            },
+            clt: {
+                id: 'clt',
+                title: 'COOLANT TEMP',
+                unit: '°C',
+                min: 40,
+                max: 130,
+                startAngle: 145 * (Math.PI / 180),
+                endAngle: 395 * (Math.PI / 180),
+                majorStep: 20,
+                minorCount: 3,
+                decimals: 0,
+                formatVal: (v) => Math.round(v) + '°C',
+                zones: [
+                    { from: 40, to: 70, color: '#0066ff' },   // холодный
+                    { from: 70, to: 100, color: '#00e676' },  // норма
+                    { from: 100, to: 130, color: '#ff2222' }  // перегрев
+                ]
+            },
+            afr: {
+                id: 'afr',
+                title: 'AIR / FUEL RATIO',
+                unit: 'AFR',
+                min: 10.0,
+                max: 18.0,
+                startAngle: 145 * (Math.PI / 180),
+                endAngle: 395 * (Math.PI / 180),
+                majorStep: 1.0,
+                minorCount: 1,
+                decimals: 1,
+                formatVal: (v) => (v > 0 ? v.toFixed(1) : '--.-'),
+                zones: [
+                    { from: 10.0, to: 12.0, color: '#ffaa00' }, // богатая
+                    { from: 12.0, to: 15.0, color: '#00e676' }, // норма
+                    { from: 15.0, to: 18.0, color: '#ff2222' }  // бедная
+                ]
+            },
+            speed: {
+                id: 'speed',
+                title: 'GPS SPEED',
+                unit: 'KM / H',
+                min: 0,
+                max: 260,
+                startAngle: 135 * (Math.PI / 180),
+                endAngle: 405 * (Math.PI / 180),
+                majorStep: 40,
+                minorCount: 3,
+                decimals: 0,
+                formatVal: (v) => Math.round(v).toString(),
+                zones: [
+                    { from: 0, to: 140, color: '#ffffff' },
+                    { from: 140, to: 260, color: '#ff2222' }
+                ]
+            }
+        };
+
+        const currentTargetValues = { boost: 0, rpm: 0, clt: 20, afr: 14.7, speed: 0 };
+        const animatedValues = { boost: 0, rpm: 0, clt: 20, afr: 14.7, speed: 0 };
+        const peakValues = { boost: 0, rpm: 0, clt: 0, afr: 0, speed: 0 };
+        const alarmStates = { boost: false, rpm: false, clt: false, afr: false, speed: false };
+
+        function drawAnalogGauge(canvas, config, curVal, peakVal, isAlarm) {
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            
+            const rect = canvas.getBoundingClientRect();
+            const w = rect.width > 0 ? rect.width : (canvas.width / dpr);
+            const h = rect.height > 0 ? rect.height : (canvas.height / dpr);
+            
+            if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+                canvas.width = Math.round(w * dpr);
+                canvas.height = Math.round(h * dpr);
+            }
+
+            ctx.save();
+            ctx.scale(dpr, dpr);
+            ctx.clearRect(0, 0, w, h);
+
+            const cx = w / 2;
+            const cy = h / 2;
+            const r = Math.min(cx, cy) * 0.88;
+
+            // 1. Металлический обод (безель) в стиле приборов BMW M
+            ctx.save();
+            const bezelGrad = ctx.createRadialGradient(cx, cy, r * 0.9, cx, cy, r);
+            bezelGrad.addColorStop(0, '#15171c');
+            bezelGrad.addColorStop(0.85, '#282b33');
+            bezelGrad.addColorStop(1, '#0a0b0d');
+
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.fillStyle = bezelGrad;
+            if (isAlarm) {
+                ctx.shadowColor = '#ff2222';
+                ctx.shadowBlur = 18;
+            } else {
+                ctx.shadowColor = 'rgba(0,0,0,0.7)';
+                ctx.shadowBlur = 10;
+            }
+            ctx.fill();
+            ctx.restore();
+
+            // Тонкое хромированное внутреннее кольцо
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * 0.95, 0, Math.PI * 2);
+            ctx.strokeStyle = isAlarm ? '#ff3333' : '#3f4450';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // 2. Черный циферблат
+            const dialGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 0.93);
+            dialGrad.addColorStop(0, '#111317');
+            dialGrad.addColorStop(1, '#050608');
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * 0.93, 0, Math.PI * 2);
+            ctx.fillStyle = dialGrad;
+            ctx.fill();
+
+            const valToAngle = (v) => {
+                const clamped = Math.max(config.min, Math.min(config.max, v));
+                const pct = (clamped - config.min) / (config.max - config.min);
+                return config.startAngle + pct * (config.endAngle - config.startAngle);
+            };
+
+            // 3. Цветные дуги зон безопасности (Zones)
+            if (config.zones) {
+                config.zones.forEach(z => {
+                    const aStart = valToAngle(z.from);
+                    const aEnd = valToAngle(z.to);
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, r * 0.82, aStart, aEnd);
+                    ctx.strokeStyle = z.color;
+                    ctx.lineWidth = Math.max(3, r * 0.035);
+                    ctx.stroke();
+                });
+            }
+
+            // 4. Деления шкалы (Ticks) и цифры
+            const range = config.max - config.min;
+            const majorCount = Math.round(range / config.majorStep);
+            const totalSteps = majorCount * (config.minorCount + 1);
+
+            for (let i = 0; i <= totalSteps; i++) {
+                const val = config.min + (i / totalSteps) * range;
+                const angle = valToAngle(val);
+                const isMajor = (i % (config.minorCount + 1) === 0);
+
+                const cosA = Math.cos(angle);
+                const sinA = Math.sin(angle);
+
+                const outerR = r * 0.82;
+                const innerR = isMajor ? (r * 0.70) : (r * 0.75);
+
+                ctx.beginPath();
+                ctx.moveTo(cx + outerR * cosA, cy + outerR * sinA);
+                ctx.lineTo(cx + innerR * cosA, cy + innerR * sinA);
+                ctx.strokeStyle = isMajor ? '#ffffff' : '#888c96';
+                ctx.lineWidth = isMajor ? Math.max(2, r * 0.02) : 1;
+                ctx.stroke();
+
+                if (isMajor) {
+                    const textR = r * 0.58;
+                    const tx = cx + textR * cosA;
+                    const ty = cy + textR * sinA;
+
+                    let labelText;
+                    if (config.scaleDiv) {
+                        labelText = (val / config.scaleDiv).toString();
+                    } else if (config.decimals === 0) {
+                        labelText = Math.round(val).toString();
+                    } else {
+                        labelText = val.toFixed(config.decimals === 2 && val === 0 ? 0 : 1);
+                    }
+
+                    ctx.font = `bold italic ${Math.round(r * 0.13)}px -apple-system, sans-serif`;
+                    ctx.fillStyle = '#dcdfe6';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(labelText, tx, ty);
+                }
+            }
+
+            // 5. Пиковая янтарная риска (Peak Hold)
+            if (peakVal !== undefined && peakVal > config.min) {
+                const pAngle = valToAngle(peakVal);
+                const cosP = Math.cos(pAngle);
+                const sinP = Math.sin(pAngle);
+                ctx.beginPath();
+                ctx.moveTo(cx + (r * 0.85) * cosP, cy + (r * 0.85) * sinP);
+                ctx.lineTo(cx + (r * 0.68) * cosP, cy + (r * 0.68) * sinP);
+                ctx.strokeStyle = '#ffa000';
+                ctx.lineWidth = Math.max(3, r * 0.028);
+                ctx.stroke();
+            }
+
+            // 6. Стрелка прибора (BMW ///M Red)
+            const needleAngle = valToAngle(curVal);
+            const cosN = Math.cos(needleAngle);
+            const sinN = Math.sin(needleAngle);
+            const cosPerp = Math.cos(needleAngle + Math.PI / 2);
+            const sinPerp = Math.sin(needleAngle + Math.PI / 2);
+
+            const needleLen = r * 0.82;
+            const needleBaseWidth = r * 0.06;
+
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.6)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetX = 3;
+            ctx.shadowOffsetY = 4;
+
+            ctx.beginPath();
+            ctx.moveTo(cx + cosN * needleLen, cy + sinN * needleLen);
+            ctx.lineTo(cx + cosPerp * needleBaseWidth - cosN * (r * 0.15), cy + sinPerp * needleBaseWidth - sinN * (r * 0.15));
+            ctx.lineTo(cx - cosN * (r * 0.18), cy - sinN * (r * 0.18));
+            ctx.lineTo(cx - cosPerp * needleBaseWidth - cosN * (r * 0.15), cy - sinPerp * needleBaseWidth - sinN * (r * 0.15));
+            ctx.closePath();
+            ctx.fillStyle = '#ff1e2e';
+            ctx.fill();
+            ctx.restore();
+
+            // Белая осевая линия
+            ctx.beginPath();
+            ctx.moveTo(cx + cosN * (needleLen * 0.95), cy + sinN * (needleLen * 0.95));
+            ctx.lineTo(cx + cosN * (r * 0.08), cy + sinN * (r * 0.08));
+            ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+
+            // Центральный колпачок
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * 0.14, 0, Math.PI * 2);
+            ctx.fillStyle = '#3a3e47';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * 0.10, 0, Math.PI * 2);
+            ctx.fillStyle = '#121417';
+            ctx.fill();
+
+            // 7. Крупный цифровой дублер
+            const valY = cy + r * 0.44;
+            ctx.font = `800 italic ${Math.round(r * 0.24)}px -apple-system, sans-serif`;
+            ctx.fillStyle = isAlarm ? '#ff2222' : '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(config.formatVal(curVal), cx, valY);
+
+            // Единица измерения
+            ctx.font = `700 italic ${Math.round(r * 0.11)}px -apple-system, sans-serif`;
+            ctx.fillStyle = '#8f94a0';
+            ctx.fillText(config.unit, cx, valY + r * 0.17);
+
+            ctx.restore();
+        }
+
+        // Анимационный цикл рендеринга (60 FPS)
+        function animLoop() {
+            GAUGE_KEYS.forEach(k => {
+                const target = currentTargetValues[k];
+                animatedValues[k] += (target - animatedValues[k]) * 0.18;
+            });
+
+            if (currentView === 'gauges') {
+                const bCanvas = document.getElementById('canvasGaugeBoost');
+                if (bCanvas) drawAnalogGauge(bCanvas, GAUGE_CONFIGS.boost, animatedValues.boost, peakValues.boost, alarmStates.boost);
+
+                const rCanvas = document.getElementById('canvasGaugeRpm');
+                if (rCanvas) drawAnalogGauge(rCanvas, GAUGE_CONFIGS.rpm, animatedValues.rpm, peakValues.rpm, alarmStates.rpm);
+
+                const cCanvas = document.getElementById('canvasGaugeClt');
+                if (cCanvas) drawAnalogGauge(cCanvas, GAUGE_CONFIGS.clt, animatedValues.clt, peakValues.clt, alarmStates.clt);
+
+                const aCanvas = document.getElementById('canvasGaugeAfr');
+                if (aCanvas) drawAnalogGauge(aCanvas, GAUGE_CONFIGS.afr, animatedValues.afr, peakValues.afr, alarmStates.afr);
+
+                const sCanvas = document.getElementById('canvasGaugeSpeed');
+                if (sCanvas) drawAnalogGauge(sCanvas, GAUGE_CONFIGS.speed, animatedValues.speed, peakValues.speed, alarmStates.speed);
+            }
+
+            if (isFsOpen) {
+                const fsCanvas = document.getElementById('fsGaugeCanvas');
+                const key = GAUGE_KEYS[currentFsGaugeIndex];
+                const cfg = GAUGE_CONFIGS[key];
+                if (fsCanvas && cfg) {
+                    drawAnalogGauge(fsCanvas, cfg, animatedValues[key], peakValues[key], alarmStates[key]);
+                }
+            }
+
+            requestAnimationFrame(animLoop);
+        }
+        requestAnimationFrame(animLoop);
+
+        // -------------------------------------------------------------
+        // ПОЛНОЭКРАННЫЙ РЕЖИМ (FULLSCREEN)
+        // -------------------------------------------------------------
+        function openFullscreenGauge(gaugeKey) {
+            const idx = GAUGE_KEYS.indexOf(gaugeKey);
+            if (idx >= 0) currentFsGaugeIndex = idx;
+            isFsOpen = true;
+            const overlay = document.getElementById('gaugeFsOverlay');
+            overlay.classList.add('active');
+            updateFsMeta();
+        }
+
+        function closeFullscreenGauge(e) {
+            if (e) e.stopPropagation();
+            isFsOpen = false;
+            document.getElementById('gaugeFsOverlay').classList.remove('active');
+            if (document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+            }
+        }
+
+        function nextFsGauge(e) {
+            if (e) e.stopPropagation();
+            currentFsGaugeIndex = (currentFsGaugeIndex + 1) % GAUGE_KEYS.length;
+            updateFsMeta();
+        }
+
+        function prevFsGauge(e) {
+            if (e) e.stopPropagation();
+            currentFsGaugeIndex = (currentFsGaugeIndex - 1 + GAUGE_KEYS.length) % GAUGE_KEYS.length;
+            updateFsMeta();
+        }
+
+        function toggleFsNext(e) {
+            if (e) e.stopPropagation();
+            nextFsGauge();
+        }
+
+        function updateFsMeta() {
+            const key = GAUGE_KEYS[currentFsGaugeIndex];
+            const cfg = GAUGE_CONFIGS[key];
+            if (!cfg) return;
+
+            document.getElementById('fsGaugeTitle').textContent = cfg.title;
+
+            const p = peakValues[key];
+            let pStr = '0';
+            if (key === 'boost') pStr = (p >= 0 ? '+' : '') + p.toFixed(2) + ' BAR';
+            else if (key === 'rpm') pStr = Math.round(p) + ' RPM';
+            else if (key === 'clt') pStr = Math.round(p) + ' °C';
+            else if (key === 'afr') pStr = (p > 0 ? p.toFixed(1) : '--.-') + ' AFR';
+            else if (key === 'speed') pStr = Math.round(p) + ' KM/H';
+
+            document.getElementById('fsPeakVal').textContent = pStr;
+
+            let warnText = 'НОРМА';
+            if (key === 'boost') warnText = 'ЛИМИТ: > 1.20 BAR';
+            else if (key === 'rpm') warnText = 'ОТСЕЧКА: > 6500 RPM';
+            else if (key === 'clt') warnText = 'ЛИМИТ: > 100 °C';
+            else if (key === 'afr') warnText = 'ЗОНА: 10.5 - 15.5';
+            else if (key === 'speed') warnText = 'ЛИМИТ: > 140 KM/H';
+            document.getElementById('fsWarnLimit').textContent = warnText;
+        }
+
+        function toggleBrowserFullscreen(e) {
+            if (e) e.stopPropagation();
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                document.exitFullscreen().catch(() => {});
+            }
+        }
+
+        // Поддержка свайпов на тач-экранах
+        let touchStartX = 0;
+        let touchStartY = 0;
+        window.addEventListener('DOMContentLoaded', () => {
+            const fsOverlayEl = document.getElementById('gaugeFsOverlay');
+            if (fsOverlayEl) {
+                fsOverlayEl.addEventListener('touchstart', (e) => {
+                    if (e.touches.length === 1) {
+                        touchStartX = e.touches[0].clientX;
+                        touchStartY = e.touches[0].clientY;
+                    }
+                }, { passive: true });
+
+                fsOverlayEl.addEventListener('touchend', (e) => {
+                    if (e.changedTouches.length === 1) {
+                        const deltaX = e.changedTouches[0].clientX - touchStartX;
+                        const deltaY = e.changedTouches[0].clientY - touchStartY;
+                        if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                            if (deltaX < 0) {
+                                nextFsGauge();
+                            } else {
+                                prevFsGauge();
+                            }
+                        }
+                    }
+                }, { passive: true });
+            }
+        });
+
         const NUS_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
         const NUS_RX_CHAR_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
         const NUS_TX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
@@ -526,49 +1321,116 @@
                 try {
                     const data = JSON.parse(text);
                     // Живая телеметрия
-                    if (data.rpm !== undefined) document.getElementById('valRpm').textContent = data.rpm;
-                    if (data.boost !== undefined) document.getElementById('valBoost').textContent = (data.boost >= 0 ? '+' : '') + data.boost.toFixed(2) + 'b';
-                    if (data.clt !== undefined) document.getElementById('valClt').textContent = Math.round(data.clt) + '°C';
-                    if (data.afr !== undefined) document.getElementById('valAfr').textContent = data.afr.toFixed(1);
-                    if (data.volt !== undefined) document.getElementById('valVolt').textContent = data.volt.toFixed(1) + 'V';
-                    if (data.spd !== undefined) document.getElementById('valSpd').textContent = Math.round(data.spd);
-                    if (data.trip !== undefined) document.getElementById('valTrip').textContent = data.trip.toFixed(1);
-                    if (data.fuel !== undefined) document.getElementById('valFuel').textContent = data.fuel.toFixed(1);
+                    if (data.rpm !== undefined) {
+                        const el = document.getElementById('valRpm');
+                        if (el) el.textContent = data.rpm;
+                        currentTargetValues.rpm = data.rpm;
+                    }
+                    if (data.boost !== undefined) {
+                        const el = document.getElementById('valBoost');
+                        if (el) el.textContent = (data.boost >= 0 ? '+' : '') + data.boost.toFixed(2) + 'b';
+                        currentTargetValues.boost = data.boost;
+                    }
+                    if (data.clt !== undefined) {
+                        const el = document.getElementById('valClt');
+                        if (el) el.textContent = Math.round(data.clt) + '°C';
+                        currentTargetValues.clt = data.clt;
+                    }
+                    if (data.afr !== undefined) {
+                        const el = document.getElementById('valAfr');
+                        if (el) el.textContent = data.afr.toFixed(1);
+                        currentTargetValues.afr = data.afr;
+                    }
+                    if (data.volt !== undefined) {
+                        const el = document.getElementById('valVolt');
+                        if (el) el.textContent = data.volt.toFixed(1) + 'V';
+                    }
+                    if (data.spd !== undefined) {
+                        const el = document.getElementById('valSpd');
+                        if (el) el.textContent = Math.round(data.spd);
+                        currentTargetValues.speed = data.spd;
+                    }
+                    if (data.trip !== undefined) {
+                        const el = document.getElementById('valTrip');
+                        if (el) el.textContent = data.trip.toFixed(1);
+                    }
+                    if (data.fuel !== undefined) {
+                        const el = document.getElementById('valFuel');
+                        if (el) el.textContent = data.fuel.toFixed(1);
+                    }
 
                     // Индикация тревоги по варнингам
                     if (data.warn) {
-                        document.getElementById('valBoost').style.color = data.warn.b ? '#ff2222' : '#ffffff';
-                        document.getElementById('valClt').style.color = data.warn.c ? '#ff2222' : '#ffffff';
-                        document.getElementById('valAfr').style.color = data.warn.a ? '#ff2222' : '#ffffff';
+                        const vb = document.getElementById('valBoost'); if (vb) vb.style.color = data.warn.b ? '#ff2222' : '#ffffff';
+                        const vc = document.getElementById('valClt'); if (vc) vc.style.color = data.warn.c ? '#ff2222' : '#ffffff';
+                        const va = document.getElementById('valAfr'); if (va) va.style.color = data.warn.a ? '#ff2222' : '#ffffff';
+
+                        alarmStates.boost = !!data.warn.b;
+                        alarmStates.clt = !!data.warn.c;
+                        alarmStates.afr = !!data.warn.a;
+                        alarmStates.rpm = (data.rpm !== undefined && data.rpm >= 6500);
+
+                        const cB = document.getElementById('cardGaugeBoost'); if (cB) cB.classList.toggle('alarm', alarmStates.boost);
+                        const cC = document.getElementById('cardGaugeClt'); if (cC) cC.classList.toggle('alarm', alarmStates.clt);
+                        const cA = document.getElementById('cardGaugeAfr'); if (cA) cA.classList.toggle('alarm', alarmStates.afr);
+                        const cR = document.getElementById('cardGaugeRpm'); if (cR) cR.classList.toggle('alarm', alarmStates.rpm);
                     }
 
                     // Пиковые значения за поездку
                     if (data.peaks) {
-                        if (data.peaks.rpm !== undefined && document.getElementById('peakRpm')) {
-                            document.getElementById('peakRpm').textContent = data.peaks.rpm;
+                        if (data.peaks.rpm !== undefined) {
+                            const el = document.getElementById('peakRpm'); if (el) el.textContent = data.peaks.rpm;
+                            peakValues.rpm = data.peaks.rpm;
+                            const foot = document.getElementById('footPeakRpm');
+                            if (foot) foot.textContent = data.peaks.rpm + ' RPM';
                         }
-                        if (data.peaks.b !== undefined && document.getElementById('peakBoost')) {
-                            document.getElementById('peakBoost').textContent = (data.peaks.b >= 0 ? '+' : '') + data.peaks.b.toFixed(2) + 'b';
+                        if (data.peaks.b !== undefined) {
+                            const el = document.getElementById('peakBoost'); if (el) el.textContent = (data.peaks.b >= 0 ? '+' : '') + data.peaks.b.toFixed(2) + 'b';
+                            peakValues.boost = data.peaks.b;
+                            const foot = document.getElementById('footPeakBoost');
+                            if (foot) foot.textContent = (data.peaks.b >= 0 ? '+' : '') + data.peaks.b.toFixed(2) + ' BAR';
                         }
-                        if (data.peaks.c !== undefined && document.getElementById('peakClt')) {
-                            document.getElementById('peakClt').textContent = Math.round(data.peaks.c) + '°C';
+                        if (data.peaks.c !== undefined) {
+                            const el = document.getElementById('peakClt'); if (el) el.textContent = Math.round(data.peaks.c) + '°C';
+                            peakValues.clt = data.peaks.c;
+                            const foot = document.getElementById('footPeakClt');
+                            if (foot) foot.textContent = Math.round(data.peaks.c) + ' °C';
                         }
-                        if (data.peaks.a !== undefined && document.getElementById('peakAfr')) {
-                            document.getElementById('peakAfr').textContent = (data.peaks.a > 0) ? data.peaks.a.toFixed(1) : '--.-';
+                        if (data.peaks.a !== undefined && data.peaks.a > 0) {
+                            const el = document.getElementById('peakAfr'); if (el) el.textContent = data.peaks.a.toFixed(1);
+                            peakValues.afr = data.peaks.a;
+                            const foot = document.getElementById('footPeakAfr');
+                            if (foot) foot.textContent = data.peaks.a.toFixed(1);
                         }
-                        if (data.peaks.spd !== undefined && document.getElementById('peakSpd')) {
-                            document.getElementById('peakSpd').textContent = Math.round(data.peaks.spd);
+                        if (data.peaks.spd !== undefined) {
+                            const el = document.getElementById('peakSpd'); if (el) el.textContent = Math.round(data.peaks.spd);
+                            peakValues.speed = data.peaks.spd;
+                            const foot = document.getElementById('footPeakSpd');
+                            if (foot) foot.textContent = Math.round(data.peaks.spd) + ' KM/H';
                         }
-                        if (data.peaks.f !== undefined && document.getElementById('peakFuel')) {
-                            document.getElementById('peakFuel').textContent = data.peaks.f.toFixed(1);
+                        if (data.peaks.f !== undefined) {
+                            const el = document.getElementById('peakFuel'); if (el) el.textContent = data.peaks.f.toFixed(1);
                         }
+                        if (isFsOpen) updateFsMeta();
                     }
 
                     // Пороги варнингов
-                    if (data.boost_max !== undefined) document.getElementById('inpWarnBoost').value = data.boost_max;
-                    if (data.clt_max !== undefined) document.getElementById('inpWarnClt').value = data.clt_max;
-                    if (data.afr_min !== undefined) document.getElementById('inpWarnAfrMin').value = data.afr_min;
-                    if (data.afr_max !== undefined) document.getElementById('inpWarnAfrMax').value = data.afr_max;
+                    if (data.boost_max !== undefined) {
+                        const inp = document.getElementById('inpWarnBoost'); if (inp) inp.value = data.boost_max;
+                        const foot = document.getElementById('footWarnBoost'); if (foot) foot.textContent = 'ЛИМИТ: > ' + data.boost_max.toFixed(2) + 'b';
+                    }
+                    if (data.clt_max !== undefined) {
+                        const inp = document.getElementById('inpWarnClt'); if (inp) inp.value = data.clt_max;
+                        const foot = document.getElementById('footWarnClt'); if (foot) foot.textContent = 'ЛИМИТ: > ' + Math.round(data.clt_max) + '°C';
+                    }
+                    if (data.afr_min !== undefined) {
+                        const inp = document.getElementById('inpWarnAfrMin'); if (inp) inp.value = data.afr_min;
+                    }
+                    if (data.afr_max !== undefined) {
+                        const inp = document.getElementById('inpWarnAfrMax'); if (inp) inp.value = data.afr_max;
+                        const foot = document.getElementById('footWarnAfr');
+                        if (foot && data.afr_min !== undefined) foot.textContent = `ЗОНА: ${data.afr_min.toFixed(1)}-${data.afr_max.toFixed(1)}`;
+                    }
                 } catch (e) {}
             } else {
                 log('< ' + text);
