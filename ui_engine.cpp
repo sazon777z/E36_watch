@@ -1030,18 +1030,22 @@ void UiEngine::createScreenGauge() {
 
     // Внизу слева: Пиковое значение за поездку (BMW Amber / Янтарный)
     lbl_digital_peak = lv_label_create(card_digital_gauge);
+    lv_obj_set_size(lbl_digital_peak, 140, 20);
+    lv_obj_set_pos(lbl_digital_peak, 8, 188);
     lv_obj_set_style_text_font(lbl_digital_peak, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_digital_peak, lv_color_make(255, 170, 0), 0);
-    lv_obj_align(lbl_digital_peak, LV_ALIGN_BOTTOM_LEFT, 8, -6);
     lv_obj_set_style_text_align(lbl_digital_peak, LV_TEXT_ALIGN_LEFT, 0);
+    lv_label_set_long_mode(lbl_digital_peak, LV_LABEL_LONG_CLIP);
     lv_label_set_text(lbl_digital_peak, "PK: +0.00b");
 
     // Внизу справа: Сохраненные лимиты варнингов для данного прибора
     lbl_digital_warn_limit = lv_label_create(card_digital_gauge);
+    lv_obj_set_size(lbl_digital_warn_limit, 140, 20);
+    lv_obj_set_pos(lbl_digital_warn_limit, 144, 188);
     lv_obj_set_style_text_font(lbl_digital_warn_limit, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_digital_warn_limit, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_digital_warn_limit, LV_ALIGN_BOTTOM_RIGHT, -8, -6);
     lv_obj_set_style_text_align(lbl_digital_warn_limit, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_long_mode(lbl_digital_warn_limit, LV_LABEL_LONG_CLIP);
     lv_label_set_text(lbl_digital_warn_limit, "LIM: >1.20b");
 }
 

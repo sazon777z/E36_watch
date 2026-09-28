@@ -114,6 +114,7 @@ void setup() {
     lv_timer_handler();
 
     Serial.println("[OK] Система готова к работе.");
+    Serial.println("[OK] UI v2.5: Цифровой прибор (пик и лимит в нижних углах карточки).");
 }
 
 void loop() {
