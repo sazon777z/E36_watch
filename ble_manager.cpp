@@ -5,6 +5,7 @@
 #include "ui_engine.h"
 #include "gps_driver.h"
 #include "trip_computer.h"
+#include "warning_manager.h"
 
 BleManager BleMgr;
 
@@ -101,16 +102,15 @@ void BleManager::update() {
     if (deviceConnected && (millis() - lastTelemetryBroadcast >= 500)) {
         lastTelemetryBroadcast = millis();
         const SensorData& s = Sensors.getData();
-        const TimeData& t = Time.getTime();
         const TripData& tr = Trip.getData();
-        const GpsData& g = Gps.getData();
+        const WarningState& ws = Warnings.getState();
 
-        char jsonBuf[192];
+        char jsonBuf[220];
         snprintf(jsonBuf, sizeof(jsonBuf), 
-                 "{\"rpm\":%d,\"clt\":%.1f,\"boost\":%.2f,\"afr\":%.1f,\"volt\":%.1f,\"spd\":%.1f,\"trip\":%.1f,\"odo\":%.0f,\"fuel\":%.1f,\"time\":\"%02d:%02d:%02d\"}\n",
-                 s.ms2.rpm, s.tempOutdoor, s.ms2.boost_bar, s.ms2.afr, s.batteryVoltage,
-                 tr.current_speed_kmh, tr.trip_distance_km, tr.total_odometer_km, tr.instant_consumption,
-                 t.hour, t.minute, t.second);
+                 "{\"rpm\":%d,\"clt\":%.1f,\"boost\":%.2f,\"afr\":%.1f,\"volt\":%.1f,\"spd\":%.1f,\"trip\":%.1f,\"fuel\":%.1f,\"warn\":{\"b\":%d,\"c\":%d,\"a\":%d}}\n",
+                 s.ms2.rpm, s.ms2Online ? s.ms2.clt_c : s.tempOutdoor, s.ms2.boost_bar, s.ms2.afr, s.batteryVoltage,
+                 tr.current_speed_kmh, tr.trip_distance_km, tr.instant_consumption,
+                 ws.boostAlarm ? 1 : 0, ws.cltAlarm ? 1 : 0, ws.afrAlarm ? 1 : 0);
 
         sendString(jsonBuf);
     }
@@ -186,6 +186,7 @@ void BleManager::processCommand(const String& cmd) {
     }
     else if (c.equalsIgnoreCase("resettrip")) {
         Trip.resetTrip();
+        UI.notifyTripReset();
         sendString("OK: TRIP RESET\n");
     }
     else if (c.startsWith("setodo ")) {
@@ -195,19 +196,89 @@ void BleManager::processCommand(const String& cmd) {
             sendString("OK: ODOMETER SET\n");
         }
     }
+    else if (c.equalsIgnoreCase("getwarn")) {
+        sendString(Warnings.getSettingsJson() + "\n");
+    }
+    else if (c.startsWith("setwarn ")) {
+        String sub = c.substring(8);
+        sub.trim();
+        if (sub.startsWith("clt ")) {
+            float val = sub.substring(4).toFloat();
+            Warnings.setCltMax(val);
+            sendString("OK: CLT WARN SET\n");
+        } else if (sub.startsWith("boost ")) {
+            float val = sub.substring(6).toFloat();
+            Warnings.setBoostMax(val);
+            sendString("OK: BOOST WARN SET\n");
+        } else if (sub.startsWith("afrmin ")) {
+            float val = sub.substring(7).toFloat();
+            Warnings.setAfrLimits(val, Warnings.getSettings().afr_lean_max);
+            sendString("OK: AFR MIN SET\n");
+        } else if (sub.startsWith("afrmax ")) {
+            float val = sub.substring(7).toFloat();
+            Warnings.setAfrLimits(Warnings.getSettings().afr_rich_min, val);
+            sendString("OK: AFR MAX SET\n");
+        } else if (sub.startsWith("en ")) {
+            int en = sub.substring(3).toInt();
+            Warnings.setEnabled(en != 0);
+            sendString("OK: WARN ENABLE SET\n");
+        } else {
+            sendString("ERR: setwarn [clt|boost|afrmin|afrmax|en] <val>\n");
+        }
+    }
+    // Поддержка JSON пакетов от мобильного приложения (например, {"boost_max":1.3,"clt_max":102})
+    else if (c.startsWith("{") && c.endsWith("}")) {
+        bool updated = false;
+        int idx = c.indexOf("\"boost_max\":");
+        if (idx >= 0) {
+            float v = c.substring(idx + 12).toFloat();
+            Warnings.setBoostMax(v);
+            updated = true;
+        }
+        idx = c.indexOf("\"clt_max\":");
+        if (idx >= 0) {
+            float v = c.substring(idx + 10).toFloat();
+            Warnings.setCltMax(v);
+            updated = true;
+        }
+        idx = c.indexOf("\"afr_max\":");
+        if (idx >= 0) {
+            float v = c.substring(idx + 10).toFloat();
+            Warnings.setAfrLimits(Warnings.getSettings().afr_rich_min, v);
+            updated = true;
+        }
+        idx = c.indexOf("\"afr_min\":");
+        if (idx >= 0) {
+            float v = c.substring(idx + 10).toFloat();
+            Warnings.setAfrLimits(v, Warnings.getSettings().afr_lean_max);
+            updated = true;
+        }
+        idx = c.indexOf("\"warn_en\":");
+        if (idx >= 0) {
+            int en = c.substring(idx + 10).toInt();
+            Warnings.setEnabled(en != 0);
+            updated = true;
+        }
+
+        if (updated) {
+            sendString("OK: " + Warnings.getSettingsJson() + "\n");
+        } else {
+            sendString("ERR: INVALID JSON\n");
+        }
+    }
     else if (c.equalsIgnoreCase("status")) {
         const SensorData& s = Sensors.getData();
         const TripData& tr = Trip.getData();
         char buf[192];
         snprintf(buf, sizeof(buf), 
-                 "MS2: %s | RPM: %d | Spd: %.0f | Trip: %.1f | Odo: %.0f | Fuel: %.1f | CLT: %.0fC | Volt: %.1fV\n",
+                 "MS2: %s | RPM: %d | Spd: %.0f | Trip: %.1f | Fuel: %.1f | CLT: %.0fC | Volt: %.1fV\n",
                  s.ms2Online ? "ONLINE" : "OFFLINE",
-                 s.ms2.rpm, tr.current_speed_kmh, tr.trip_distance_km, tr.total_odometer_km,
+                 s.ms2.rpm, tr.current_speed_kmh, tr.trip_distance_km,
                  tr.instant_consumption, s.tempOutdoor, s.batteryVoltage);
         sendString(buf);
     }
     else if (c.equalsIgnoreCase("help")) {
-        sendString("CMDS: epoch <sec>, time HH:MM[:SS], date DD.MM.YYYY, bright <0-255>, screen <0-4>, resettrip, setodo <km>, status\n");
+        sendString("CMDS: epoch, time, date, bright, screen, resettrip, setodo, getwarn, setwarn [clt|boost|afrmin|afrmax|en] <val>, status\n");
     }
     else {
         sendString("ERR: UNKNOWN CMD (type 'help')\n");

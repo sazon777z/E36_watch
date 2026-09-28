@@ -34,6 +34,7 @@
 #include "trip_computer.h"
 #include "time_keeper.h"
 #include "sensors.h"
+#include "warning_manager.h"
 #include "ui_engine.h"
 #include "ble_manager.h"
 
@@ -98,10 +99,11 @@ void setup() {
     snprintf(splashMsg, sizeof(splashMsg), "RST: %s", rstStr);
     UI.showBootSplash(splashMsg);
 
-    // 5. Инициализация часов, сенсоров, одометра/расхода, UI и Bluetooth LE
+    // 5. Инициализация часов, сенсоров, одометра/расхода, варнингов, UI и Bluetooth LE
     Time.init();
     Trip.init();
     Sensors.init();
+    Warnings.init();
     UI.init();
     BleMgr.init();
 
@@ -123,10 +125,11 @@ void loop() {
 
     unsigned long currentMillis = millis();
 
-    // 5. Периодический опрос датчиков и АЦП бортсети (каждые 100 мс)
+    // 5. Периодический опрос датчиков, варнингов и АЦП бортсети (каждые 100 мс)
     if (currentMillis - lastSensorUpdate >= 100) {
         lastSensorUpdate = currentMillis;
         Sensors.update();
+        Warnings.update(Sensors.getData());
 
         // Автоматическое диммирование при включении габаритов
         if (Sensors.getData().headlightsOn) {
@@ -146,6 +149,7 @@ void loop() {
         } else if (c == 'r' || c == 'R') {
             Serial.println("[CMD] Команда 'r' получена! Сброс одометра поездки...");
             Trip.resetTrip();
+            UI.notifyTripReset();
             Serial.println("[CMD] Trip.resetTrip() завершен!");
         }
     }
@@ -161,6 +165,7 @@ void loop() {
         Serial.println("[BTN] Кнопка удерживается (>1.2 сек)!");
         if (UI.getCurrentScreen() == ScreenId::OBC_TRIP_FUEL) {
             Trip.resetTrip();     // Сброс суточного пробега на экране расхода
+            UI.notifyTripReset(); // Визуальное уведомление
         } else {
             Sensors.resetVoltageExtremes(); // Сброс минимального пускового напряжения
         }

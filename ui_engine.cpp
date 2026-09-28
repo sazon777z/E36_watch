@@ -32,35 +32,45 @@ UiEngine::UiEngine()
       lbl_clock(nullptr),
       lbl_gps_sats_1(nullptr),
       lbl_ms2_status_1(nullptr),
+      card_boost_1(nullptr),
       lbl_boost_val(nullptr),
       lbl_boost_sub(nullptr),
+      card_clt_1(nullptr),
       lbl_clt_val(nullptr),
       lbl_clt_sub(nullptr),
+      card_afr_1(nullptr),
       lbl_afr_val(nullptr),
       lbl_afr_sub(nullptr),
       lbl_trip_spd(nullptr),
       lbl_trip_fix(nullptr),
       lbl_trip_inst(nullptr),
+      card_trip_dist(nullptr),
       lbl_trip_dist(nullptr),
+      lbl_trip_reset_hint(nullptr),
+      card_trip_avg(nullptr),
       lbl_trip_avg(nullptr),
-      lbl_trip_odo(nullptr),
+      card_trip_fuel(nullptr),
       lbl_trip_fuel(nullptr),
       lbl_gps_sats_2(nullptr),
       lbl_ms2_status_2(nullptr),
       lbl_telem_volt(nullptr),
       lbl_telem_volt_sub(nullptr),
+      card_telem_clt(nullptr),
       lbl_telem_clt(nullptr),
       lbl_telem_clt_sub(nullptr),
+      card_telem_afr(nullptr),
       lbl_telem_afr(nullptr),
       lbl_telem_afr_sub(nullptr),
       lbl_telem_tps(nullptr),
       lbl_telem_tps_sub(nullptr),
+      card_telem_boost(nullptr),
       lbl_telem_boost_txt(nullptr),
       bar_telem_boost(nullptr),
       lbl_gps_sats_3(nullptr),
       lbl_ms2_status_3(nullptr),
       lbl_m_rpm(nullptr),
       bar_m_shift(nullptr),
+      card_m_boost(nullptr),
       lbl_m_boost(nullptr),
       lbl_m_adv(nullptr),
       lbl_m_offline(nullptr),
@@ -87,6 +97,20 @@ void UiEngine::dispFlushCb(lv_disp_drv_t* disp_drv, const lv_area_t* area, lv_co
     tft.endWrite();
 
     lv_disp_flush_ready(disp_drv);
+}
+
+// Вспомогательная функция применения тревожного мигания карточки при варнинге
+static void applyCardWarning(lv_obj_t* card, bool isAlarm, bool blinkPhase) {
+    if (!card) return;
+    if (isAlarm && blinkPhase) {
+        lv_obj_set_style_bg_color(card, lv_color_make(65, 10, 15), 0);
+        lv_obj_set_style_border_color(card, COLOR_LV_M_RED, 0);
+        lv_obj_set_style_border_width(card, 2, 0);
+    } else {
+        lv_obj_set_style_bg_color(card, COLOR_LV_CARD_BG, 0);
+        lv_obj_set_style_border_color(card, COLOR_LV_CARD_BORDER, 0);
+        lv_obj_set_style_border_width(card, 1, 0);
+    }
 }
 
 // Вспомогательная функция создания разделительной линии
@@ -196,60 +220,60 @@ void UiEngine::createScreenClock() {
     lv_label_set_text(lbl_clock, "12:34");
 
     // ПЛИТКА 1: BOOST (x=10, y=118, w=94, h=110)
-    lv_obj_t* card_boost = createCardTile(scr_clock, 10, 118, 94, 110);
-    lv_obj_t* t_boost = lv_label_create(card_boost);
+    card_boost_1 = createCardTile(scr_clock, 10, 118, 94, 110);
+    lv_obj_t* t_boost = lv_label_create(card_boost_1);
     lv_obj_set_style_text_font(t_boost, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_boost, COLOR_LV_SILVER, 0);
     lv_obj_align(t_boost, LV_ALIGN_TOP_MID, 0, 4);
     lv_label_set_text(t_boost, "BOOST");
 
-    lbl_boost_val = lv_label_create(card_boost);
+    lbl_boost_val = lv_label_create(card_boost_1);
     lv_obj_set_style_text_font(lbl_boost_val, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_boost_val, COLOR_LV_WHITE, 0);
     lv_obj_align(lbl_boost_val, LV_ALIGN_CENTER, 0, 2);
     lv_label_set_text(lbl_boost_val, "0.00b");
 
-    lbl_boost_sub = lv_label_create(card_boost);
+    lbl_boost_sub = lv_label_create(card_boost_1);
     lv_obj_set_style_text_font(lbl_boost_sub, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_boost_sub, COLOR_LV_MID_GRAY, 0);
     lv_obj_align(lbl_boost_sub, LV_ALIGN_BOTTOM_MID, 0, -4);
     lv_label_set_text(lbl_boost_sub, "BAR");
 
     // ПЛИТКА 2: COOLANT (x=113, y=118, w=94, h=110)
-    lv_obj_t* card_clt = createCardTile(scr_clock, 113, 118, 94, 110);
-    lv_obj_t* t_clt = lv_label_create(card_clt);
+    card_clt_1 = createCardTile(scr_clock, 113, 118, 94, 110);
+    lv_obj_t* t_clt = lv_label_create(card_clt_1);
     lv_obj_set_style_text_font(t_clt, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_clt, COLOR_LV_SILVER, 0);
     lv_obj_align(t_clt, LV_ALIGN_TOP_MID, 0, 4);
     lv_label_set_text(t_clt, "COOLANT");
 
-    lbl_clt_val = lv_label_create(card_clt);
+    lbl_clt_val = lv_label_create(card_clt_1);
     lv_obj_set_style_text_font(lbl_clt_val, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_clt_val, COLOR_LV_WHITE, 0);
     lv_obj_align(lbl_clt_val, LV_ALIGN_CENTER, 0, 2);
     lv_label_set_text(lbl_clt_val, "20C");
 
-    lbl_clt_sub = lv_label_create(card_clt);
+    lbl_clt_sub = lv_label_create(card_clt_1);
     lv_obj_set_style_text_font(lbl_clt_sub, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_clt_sub, COLOR_LV_MID_GRAY, 0);
     lv_obj_align(lbl_clt_sub, LV_ALIGN_BOTTOM_MID, 0, -4);
     lv_label_set_text(lbl_clt_sub, "TEMP");
 
     // ПЛИТКА 3: AFR (x=216, y=118, w=94, h=110)
-    lv_obj_t* card_afr = createCardTile(scr_clock, 216, 118, 94, 110);
-    lv_obj_t* t_afr = lv_label_create(card_afr);
+    card_afr_1 = createCardTile(scr_clock, 216, 118, 94, 110);
+    lv_obj_t* t_afr = lv_label_create(card_afr_1);
     lv_obj_set_style_text_font(t_afr, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_afr, COLOR_LV_SILVER, 0);
     lv_obj_align(t_afr, LV_ALIGN_TOP_MID, 0, 4);
     lv_label_set_text(t_afr, "AFR");
 
-    lbl_afr_val = lv_label_create(card_afr);
+    lbl_afr_val = lv_label_create(card_afr_1);
     lv_obj_set_style_text_font(lbl_afr_val, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_afr_val, COLOR_LV_WHITE, 0);
     lv_obj_align(lbl_afr_val, LV_ALIGN_CENTER, 0, 2);
     lv_label_set_text(lbl_afr_val, "--.-");
 
-    lbl_afr_sub = lv_label_create(card_afr);
+    lbl_afr_sub = lv_label_create(card_afr_1);
     lv_obj_set_style_text_font(lbl_afr_sub, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_afr_sub, COLOR_LV_MID_GRAY, 0);
     lv_obj_align(lbl_afr_sub, LV_ALIGN_BOTTOM_MID, 0, -4);
@@ -257,7 +281,7 @@ void UiEngine::createScreenClock() {
 }
 
 // -----------------------------------------------------------------------------
-// ЭКРАН 2: БОРТОВОЙ КОМПЬЮТЕР И РАСХОД (OBC TRIP & FUEL) - СПОРТИВНЫЕ ПЛИТКИ
+// ЭКРАН 2: БОРТОВОЙ КОМПЬЮТЕР И РАСХОД (OBC TRIP & FUEL) - 3 СПОРТИВНЫЕ ПЛИТКИ
 // -----------------------------------------------------------------------------
 void UiEngine::createScreenTrip() {
     scr_trip = lv_obj_create(NULL);
@@ -267,7 +291,7 @@ void UiEngine::createScreenTrip() {
     lbl_ms2_status_2 = createMs2StatusLabel(scr_trip);
     lbl_gps_sats_2 = createGpsCornerLabel(scr_trip);
 
-    // Верхняя плитка скорости и расхода
+    // Верхняя плитка скорости и мгновенного расхода
     lv_obj_t* top_card = createCardTile(scr_trip, 10, 32, 300, 66);
 
     lbl_trip_spd = lv_label_create(top_card);
@@ -294,62 +318,73 @@ void UiEngine::createScreenTrip() {
     lv_obj_align(lbl_trip_inst, LV_ALIGN_RIGHT_MID, -12, 0);
     lv_label_set_text(lbl_trip_inst, "0.0 L/H");
 
-    // 4 Квадранта в виде спортивных плиток
-    // Квадрант 1: Суточный пробег (верх-лево)
-    lv_obj_t* c_dist = createCardTile(scr_trip, 10, 104, 145, 62);
-    lv_obj_t* t_dist = lv_label_create(c_dist);
+    // 3 Спортивные плитки снизу (симметрично экрану часов: 94 x 128 px)
+    // Плитка 1: TRIP DISTANCE (слева)
+    card_trip_dist = createCardTile(scr_trip, 10, 104, 94, 128);
+    lv_obj_t* t_dist = lv_label_create(card_trip_dist);
     lv_obj_set_style_text_font(t_dist, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_dist, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_dist, LV_ALIGN_TOP_LEFT, 6, 2);
-    lv_label_set_text(t_dist, "TRIP DISTANCE:");
+    lv_obj_align(t_dist, LV_ALIGN_TOP_MID, 0, 4);
+    lv_label_set_text(t_dist, "TRIP DIST");
 
-    lbl_trip_dist = lv_label_create(c_dist);
+    lbl_trip_dist = lv_label_create(card_trip_dist);
     lv_obj_set_style_text_font(lbl_trip_dist, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_trip_dist, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_trip_dist, LV_ALIGN_BOTTOM_LEFT, 6, -2);
+    lv_obj_align(lbl_trip_dist, LV_ALIGN_CENTER, 0, 0);
     lv_label_set_text(lbl_trip_dist, "0.0 km");
 
-    // Квадрант 2: Средний расход (верх-право)
-    lv_obj_t* c_avg = createCardTile(scr_trip, 165, 104, 145, 62);
-    lv_obj_t* t_avg = lv_label_create(c_avg);
+    lbl_trip_reset_hint = lv_label_create(card_trip_dist);
+    lv_obj_set_style_text_font(lbl_trip_reset_hint, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(lbl_trip_reset_hint, COLOR_LV_MID_GRAY, 0);
+    lv_obj_align(lbl_trip_reset_hint, LV_ALIGN_BOTTOM_MID, 0, -4);
+    lv_label_set_text(lbl_trip_reset_hint, "[HOLD RST]");
+
+    // Плитка 2: AVG CONSUMPTION (по центру)
+    card_trip_avg = createCardTile(scr_trip, 113, 104, 94, 128);
+    lv_obj_t* t_avg = lv_label_create(card_trip_avg);
     lv_obj_set_style_text_font(t_avg, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_avg, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_avg, LV_ALIGN_TOP_LEFT, 6, 2);
-    lv_label_set_text(t_avg, "AVG CONSUMPTION:");
+    lv_obj_align(t_avg, LV_ALIGN_TOP_MID, 0, 4);
+    lv_label_set_text(t_avg, "AVG CONS");
 
-    lbl_trip_avg = lv_label_create(c_avg);
+    lbl_trip_avg = lv_label_create(card_trip_avg);
     lv_obj_set_style_text_font(lbl_trip_avg, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_trip_avg, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_trip_avg, LV_ALIGN_BOTTOM_LEFT, 6, -2);
+    lv_obj_align(lbl_trip_avg, LV_ALIGN_CENTER, 0, 0);
     lv_label_set_text(lbl_trip_avg, "--- L");
 
-    // Квадрант 3: Общий одометр (низ-лево)
-    lv_obj_t* c_odo = createCardTile(scr_trip, 10, 172, 145, 62);
-    lv_obj_t* t_odo = lv_label_create(c_odo);
-    lv_obj_set_style_text_font(t_odo, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_odo, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_odo, LV_ALIGN_TOP_LEFT, 6, 2);
-    lv_label_set_text(t_odo, "TOTAL ODOMETER:");
+    lv_obj_t* sub_avg = lv_label_create(card_trip_avg);
+    lv_obj_set_style_text_font(sub_avg, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(sub_avg, COLOR_LV_MID_GRAY, 0);
+    lv_obj_align(sub_avg, LV_ALIGN_BOTTOM_MID, 0, -4);
+    lv_label_set_text(sub_avg, "L/100KM");
 
-    lbl_trip_odo = lv_label_create(c_odo);
-    lv_obj_set_style_text_font(lbl_trip_odo, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_trip_odo, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_trip_odo, LV_ALIGN_BOTTOM_LEFT, 6, -2);
-    lv_label_set_text(lbl_trip_odo, "0 km");
-
-    // Квадрант 4: Топливо поездки (низ-право)
-    lv_obj_t* c_fuel = createCardTile(scr_trip, 165, 172, 145, 62);
-    lv_obj_t* t_fuel = lv_label_create(c_fuel);
+    // Плитка 3: TRIP FUEL (справа)
+    card_trip_fuel = createCardTile(scr_trip, 216, 104, 94, 128);
+    lv_obj_t* t_fuel = lv_label_create(card_trip_fuel);
     lv_obj_set_style_text_font(t_fuel, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_fuel, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_fuel, LV_ALIGN_TOP_LEFT, 6, 2);
-    lv_label_set_text(t_fuel, "TRIP FUEL:");
+    lv_obj_align(t_fuel, LV_ALIGN_TOP_MID, 0, 4);
+    lv_label_set_text(t_fuel, "TRIP FUEL");
 
-    lbl_trip_fuel = lv_label_create(c_fuel);
+    lbl_trip_fuel = lv_label_create(card_trip_fuel);
     lv_obj_set_style_text_font(lbl_trip_fuel, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_trip_fuel, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_trip_fuel, LV_ALIGN_BOTTOM_LEFT, 6, -2);
+    lv_obj_align(lbl_trip_fuel, LV_ALIGN_CENTER, 0, 0);
     lv_label_set_text(lbl_trip_fuel, "0.0 L");
+
+    lv_obj_t* sub_fuel = lv_label_create(card_trip_fuel);
+    lv_obj_set_style_text_font(sub_fuel, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(sub_fuel, COLOR_LV_MID_GRAY, 0);
+    lv_obj_align(sub_fuel, LV_ALIGN_BOTTOM_MID, 0, -4);
+    lv_label_set_text(sub_fuel, "LITERS");
+}
+
+void UiEngine::notifyTripReset() {
+    if (lbl_trip_reset_hint) {
+        lv_label_set_text(lbl_trip_reset_hint, "RESET OK!");
+        lv_obj_set_style_text_color(lbl_trip_reset_hint, COLOR_LV_ONLINE, 0);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -384,40 +419,40 @@ void UiEngine::createScreenTelem() {
     lv_label_set_text(lbl_telem_volt_sub, "IGNITION ON");
 
     // 2. ОЖ (верх-право)
-    lv_obj_t* c_c = createCardTile(scr_telem, 165, 32, 145, 66);
-    lv_obj_t* t_c = lv_label_create(c_c);
+    card_telem_clt = createCardTile(scr_telem, 165, 32, 145, 66);
+    lv_obj_t* t_c = lv_label_create(card_telem_clt);
     lv_obj_set_style_text_font(t_c, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_c, COLOR_LV_SILVER, 0);
     lv_obj_align(t_c, LV_ALIGN_TOP_LEFT, 6, 2);
     lv_label_set_text(t_c, "COOLANT");
 
-    lbl_telem_clt = lv_label_create(c_c);
+    lbl_telem_clt = lv_label_create(card_telem_clt);
     lv_obj_set_style_text_font(lbl_telem_clt, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_telem_clt, COLOR_LV_WHITE, 0);
     lv_obj_align(lbl_telem_clt, LV_ALIGN_LEFT_MID, 6, 2);
     lv_label_set_text(lbl_telem_clt, "+25 C");
 
-    lbl_telem_clt_sub = lv_label_create(c_c);
+    lbl_telem_clt_sub = lv_label_create(card_telem_clt);
     lv_obj_set_style_text_font(lbl_telem_clt_sub, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_telem_clt_sub, COLOR_LV_SILVER, 0);
     lv_obj_align(lbl_telem_clt_sub, LV_ALIGN_BOTTOM_LEFT, 6, -2);
     lv_label_set_text(lbl_telem_clt_sub, "INTAKE: +20 C");
 
     // 3. AFR (низ-лево)
-    lv_obj_t* c_a = createCardTile(scr_telem, 10, 104, 145, 66);
-    lv_obj_t* t_a = lv_label_create(c_a);
+    card_telem_afr = createCardTile(scr_telem, 10, 104, 145, 66);
+    lv_obj_t* t_a = lv_label_create(card_telem_afr);
     lv_obj_set_style_text_font(t_a, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_a, COLOR_LV_SILVER, 0);
     lv_obj_align(t_a, LV_ALIGN_TOP_LEFT, 6, 2);
     lv_label_set_text(t_a, "AIR / FUEL (AFR)");
 
-    lbl_telem_afr = lv_label_create(c_a);
+    lbl_telem_afr = lv_label_create(card_telem_afr);
     lv_obj_set_style_text_font(lbl_telem_afr, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_telem_afr, COLOR_LV_WHITE, 0);
     lv_obj_align(lbl_telem_afr, LV_ALIGN_LEFT_MID, 6, 2);
     lv_label_set_text(lbl_telem_afr, "--.-");
 
-    lbl_telem_afr_sub = lv_label_create(c_a);
+    lbl_telem_afr_sub = lv_label_create(card_telem_afr);
     lv_obj_set_style_text_font(lbl_telem_afr_sub, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_telem_afr_sub, COLOR_LV_SILVER, 0);
     lv_obj_align(lbl_telem_afr_sub, LV_ALIGN_BOTTOM_LEFT, 6, -2);
@@ -444,14 +479,14 @@ void UiEngine::createScreenTelem() {
     lv_label_set_text(lbl_telem_tps_sub, "MAP: 100 kPa");
 
     // Нижняя шкала наддува
-    lv_obj_t* c_boost = createCardTile(scr_telem, 10, 176, 300, 56);
-    lbl_telem_boost_txt = lv_label_create(c_boost);
+    card_telem_boost = createCardTile(scr_telem, 10, 176, 300, 56);
+    lbl_telem_boost_txt = lv_label_create(card_telem_boost);
     lv_obj_set_style_text_font(lbl_telem_boost_txt, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_telem_boost_txt, COLOR_LV_SILVER, 0);
     lv_obj_align(lbl_telem_boost_txt, LV_ALIGN_TOP_LEFT, 8, 2);
     lv_label_set_text(lbl_telem_boost_txt, "BOOST: 0.00 Bar (100 kPa)");
 
-    bar_telem_boost = lv_bar_create(c_boost);
+    bar_telem_boost = lv_bar_create(card_telem_boost);
     lv_obj_set_size(bar_telem_boost, 280, 16);
     lv_obj_align(bar_telem_boost, LV_ALIGN_BOTTOM_MID, 0, -4);
     lv_bar_set_range(bar_telem_boost, 0, 230); // -0.8 .. +1.5 bar
@@ -516,14 +551,14 @@ void UiEngine::createScreenMPerf() {
 
     // Нижние 2 плитки
     // 1. Наддув
-    lv_obj_t* c_mb = createCardTile(scr_m_perf, 10, 154, 145, 78);
-    lv_obj_t* t_mb = lv_label_create(c_mb);
+    card_m_boost = createCardTile(scr_m_perf, 10, 154, 145, 78);
+    lv_obj_t* t_mb = lv_label_create(card_m_boost);
     lv_obj_set_style_text_font(t_mb, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_mb, COLOR_LV_SILVER, 0);
     lv_obj_align(t_mb, LV_ALIGN_TOP_LEFT, 6, 2);
     lv_label_set_text(t_mb, "BOOST");
 
-    lbl_m_boost = lv_label_create(c_mb);
+    lbl_m_boost = lv_label_create(card_m_boost);
     lv_obj_set_style_text_font(lbl_m_boost, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_m_boost, COLOR_LV_WHITE, 0);
     lv_obj_align(lbl_m_boost, LV_ALIGN_BOTTOM_LEFT, 6, -6);
@@ -686,6 +721,12 @@ void UiEngine::updateClockScreen() {
     const TimeData& td = Time.getTime();
     const SensorData& sens = Sensors.getData();
     const GpsData& gps = Gps.getData();
+    const WarningState& warn = Warnings.getState();
+
+    // Применение тревожного мигания карточек при аварийных ситуациях
+    applyCardWarning(card_boost_1, warn.boostAlarm, warn.blinkPhase);
+    applyCardWarning(card_clt_1, warn.cltAlarm, warn.blinkPhase);
+    applyCardWarning(card_afr_1, warn.afrAlarm, warn.blinkPhase);
 
     // Статус MegaSquirt 2 в верхнем левом углу
     updateMs2StatusWidget(lbl_ms2_status_1, sens.ms2Online);
@@ -713,19 +754,23 @@ void UiEngine::updateClockScreen() {
     // Плитки: BOOST, COOLANT, AFR
     if (sens.ms2Online) {
         lv_label_set_text_fmt(lbl_boost_val, "%+.2fb", sens.ms2.boost_bar);
-        lv_label_set_text(lbl_boost_sub, "BAR");
+        lv_label_set_text(lbl_boost_sub, warn.boostAlarm ? "OVERBOOST!" : "BAR");
 
         lv_label_set_text_fmt(lbl_clt_val, "%dC", (int)round(sens.ms2.clt_c));
-        lv_label_set_text(lbl_clt_sub, "MS2 CLT");
+        lv_label_set_text(lbl_clt_sub, warn.cltAlarm ? "OVERHEAT!" : "MS2 CLT");
 
         lv_label_set_text_fmt(lbl_afr_val, "%.1f", sens.ms2.afr);
-        lv_label_set_text_fmt(lbl_afr_sub, "TGT %.1f", sens.ms2.afr_target);
+        if (warn.afrAlarm) {
+            lv_label_set_text(lbl_afr_sub, (sens.ms2.afr >= Warnings.getSettings().afr_lean_max) ? "LEAN MIX!" : "RICH MIX!");
+        } else {
+            lv_label_set_text_fmt(lbl_afr_sub, "TGT %.1f", sens.ms2.afr_target);
+        }
     } else {
         lv_label_set_text(lbl_boost_val, "0.00b");
         lv_label_set_text(lbl_boost_sub, "OFFLINE");
 
         lv_label_set_text_fmt(lbl_clt_val, "%dC", (int)round(sens.tempOutdoor));
-        lv_label_set_text(lbl_clt_sub, "SENSOR");
+        lv_label_set_text(lbl_clt_sub, warn.cltAlarm ? "OVERHEAT!" : "SENSOR");
 
         lv_label_set_text(lbl_afr_val, "--.-");
         lv_label_set_text(lbl_afr_sub, "NO CAN");
@@ -765,20 +810,25 @@ void UiEngine::updateTripScreen() {
     snprintf(instBuf, sizeof(instBuf), "%.1f %s", trip.instant_consumption, trip.isLitersPerHour ? "L/H" : "L");
     lv_label_set_text(lbl_trip_inst, instBuf);
 
-    // 4 Квадранта
+    // 3 Спортивные плитки
     lv_label_set_text_fmt(lbl_trip_dist, "%.1f km", trip.trip_distance_km);
     if (trip.trip_distance_km >= 0.1f) {
-        lv_label_set_text_fmt(lbl_trip_avg, "%.1f L", trip.avg_consumption_l_100km);
+        lv_label_set_text_fmt(lbl_trip_avg, "%.1f", trip.avg_consumption_l_100km);
     } else {
-        lv_label_set_text(lbl_trip_avg, "--- L");
+        lv_label_set_text(lbl_trip_avg, "---");
     }
-    lv_label_set_text_fmt(lbl_trip_odo, "%.0f km", trip.total_odometer_km);
     lv_label_set_text_fmt(lbl_trip_fuel, "%.1f L", trip.trip_fuel_liters);
 }
 
 void UiEngine::updateTelemScreen() {
     const SensorData& sens = Sensors.getData();
     const GpsData& gps = Gps.getData();
+    const WarningState& warn = Warnings.getState();
+
+    // Применение тревожного мигания карточек
+    applyCardWarning(card_telem_clt, warn.cltAlarm, warn.blinkPhase);
+    applyCardWarning(card_telem_afr, warn.afrAlarm, warn.blinkPhase);
+    applyCardWarning(card_telem_boost, warn.boostAlarm, warn.blinkPhase);
 
     // Статус MegaSquirt 2 в верхнем левом углу
     updateMs2StatusWidget(lbl_ms2_status_3, sens.ms2Online);
@@ -848,6 +898,10 @@ void UiEngine::updateTelemScreen() {
 void UiEngine::updateMPerfScreen() {
     const SensorData& sens = Sensors.getData();
     const GpsData& gps = Gps.getData();
+    const WarningState& warn = Warnings.getState();
+
+    // Применение тревожного мигания карточки наддува
+    applyCardWarning(card_m_boost, warn.boostAlarm, warn.blinkPhase);
 
     // Статус MegaSquirt 2 в верхнем левом углу
     updateMs2StatusWidget(lbl_ms2_status_4, sens.ms2Online);

@@ -10,6 +10,8 @@
 #include "trip_computer.h"
 #include "bmw_theme.h"
 
+#include "warning_manager.h"
+
 // Объявления кастомных 4bpp сглаженных шрифтов
 extern "C" {
     extern const lv_font_t lv_font_clock_70;
@@ -41,6 +43,9 @@ public:
     // Заставка загрузки
     void showBootSplash(const char* subtitle = "ON-BOARD COMPUTER");
 
+    // Визуальное подтверждение сброса пробега
+    void notifyTripReset();
+
     // Заглушки для совместимости
     void toggleStopwatch() {}
     void resetStopwatch() {}
@@ -69,21 +74,26 @@ private:
     lv_obj_t* lbl_clock;
     lv_obj_t* lbl_gps_sats_1;
     lv_obj_t* lbl_ms2_status_1;
+    lv_obj_t* card_boost_1;
     lv_obj_t* lbl_boost_val;
     lv_obj_t* lbl_boost_sub;
+    lv_obj_t* card_clt_1;
     lv_obj_t* lbl_clt_val;
     lv_obj_t* lbl_clt_sub;
+    lv_obj_t* card_afr_1;
     lv_obj_t* lbl_afr_val;
     lv_obj_t* lbl_afr_sub;
 
-    // Виджеты Экрана 2: Бортовой компьютер и расход
+    // Виджеты Экрана 2: Бортовой компьютер и расход (3 плитки)
     lv_obj_t* lbl_trip_spd;
     lv_obj_t* lbl_trip_fix;
     lv_obj_t* lbl_trip_inst;
-    lv_obj_t* lbl_trip_inst_lbl;
+    lv_obj_t* card_trip_dist;
     lv_obj_t* lbl_trip_dist;
+    lv_obj_t* lbl_trip_reset_hint;
+    lv_obj_t* card_trip_avg;
     lv_obj_t* lbl_trip_avg;
-    lv_obj_t* lbl_trip_odo;
+    lv_obj_t* card_trip_fuel;
     lv_obj_t* lbl_trip_fuel;
     lv_obj_t* lbl_gps_sats_2;
     lv_obj_t* lbl_ms2_status_2;
@@ -91,12 +101,15 @@ private:
     // Виджеты Экрана 3: Телеметрия мотора
     lv_obj_t* lbl_telem_volt;
     lv_obj_t* lbl_telem_volt_sub;
+    lv_obj_t* card_telem_clt;
     lv_obj_t* lbl_telem_clt;
     lv_obj_t* lbl_telem_clt_sub;
+    lv_obj_t* card_telem_afr;
     lv_obj_t* lbl_telem_afr;
     lv_obj_t* lbl_telem_afr_sub;
     lv_obj_t* lbl_telem_tps;
     lv_obj_t* lbl_telem_tps_sub;
+    lv_obj_t* card_telem_boost;
     lv_obj_t* lbl_telem_boost_txt;
     lv_obj_t* bar_telem_boost;
     lv_obj_t* lbl_gps_sats_3;
@@ -105,6 +118,7 @@ private:
     // Виджеты Экрана 4: ///M Тахометр
     lv_obj_t* lbl_m_rpm;
     lv_obj_t* bar_m_shift;
+    lv_obj_t* card_m_boost;
     lv_obj_t* lbl_m_boost;
     lv_obj_t* lbl_m_adv;
     lv_obj_t* lbl_m_offline;
