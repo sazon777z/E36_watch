@@ -125,8 +125,8 @@ void loop() {
 
     unsigned long currentMillis = millis();
 
-    // 5. Периодический опрос датчиков, варнингов и АЦП бортсети (каждые 100 мс)
-    if (currentMillis - lastSensorUpdate >= 100) {
+    // 5. Периодический опрос датчиков, варнингов и АЦП бортсети (каждые 20 мс для четкого считывания кнопки)
+    if (currentMillis - lastSensorUpdate >= 20) {
         lastSensorUpdate = currentMillis;
         Sensors.update();
         Warnings.update(Sensors.getData());
@@ -139,41 +139,63 @@ void loop() {
         }
     }
 
-    // 6. Обработка команд через Serial (диагностика без физической кнопки)
+    // 6. Обработка команд через Serial (диагностика и стендовое тестирование)
     if (Serial.available()) {
         char c = Serial.read();
         if (c == 'n' || c == 'N') {
-            Serial.println("[CMD] Команда 'n' получена! Вызов UI.nextScreen()...");
+            Serial.println("[CMD] 'n' -> Следующий экран");
             UI.nextScreen();
-            Serial.println("[CMD] UI.nextScreen() завершен!");
-        } else if (c == 'g' || c == 'G') {
-            Serial.println("[CMD] Команда 'g' получена! Вызов UI.nextGaugeType()...");
+        } else if (c == 'g' || c == 'G' || c == 'd' || c == 'D') {
+            Serial.println("[CMD] 'g'/'d' -> Следующий тип датчика");
             UI.nextGaugeType();
-            Serial.println("[CMD] UI.nextGaugeType() завершен!");
+        } else if (c == 'h' || c == 'H') {
+            Serial.println("[CMD] 'h' -> Имитация удержания кнопки (HOLD)");
+            if (UI.getCurrentScreen() == ScreenId::GAUGE_SELECTOR) {
+                UI.setScreen(ScreenId::SINGLE_GAUGE);
+            } else if (UI.getCurrentScreen() == ScreenId::SINGLE_GAUGE) {
+                UI.setScreen(ScreenId::GAUGE_SELECTOR);
+            } else if (UI.getCurrentScreen() == ScreenId::OBC_TRIP_FUEL) {
+                Trip.resetTrip();
+                UI.notifyTripReset();
+            } else {
+                Sensors.resetVoltageExtremes();
+            }
         } else if (c == 'r' || c == 'R') {
-            Serial.println("[CMD] Команда 'r' получена! Сброс одометра поездки...");
+            Serial.println("[CMD] 'r' -> Сброс одометра поездки");
             Trip.resetTrip();
             UI.notifyTripReset();
-            Serial.println("[CMD] Trip.resetTrip() завершен!");
+        } else if (c >= '1' && c <= '7') {
+            ScreenId sid = (ScreenId)(c - '0');
+            Serial.printf("[CMD] Прямой переход на экран %d\n", (int)sid);
+            UI.setScreen(sid);
         }
     }
 
-    // 7. Обработка нажатий физической кнопки
-    if (Sensors.isNextButtonPressed()) {
-        Serial.println("[BTN] Кнопка нажата! Вызов UI.nextScreen()...");
-        UI.nextScreen();      // Переключение на следующий экран в любом режиме
-        Serial.println("[BTN] UI.nextScreen() завершен!");
-    }
-
-    if (Sensors.isNextButtonHeld()) {
-        Serial.println("[BTN] Кнопка удерживается (>1.2 сек)!");
-        if (UI.getCurrentScreen() == ScreenId::OBC_TRIP_FUEL) {
-            Trip.resetTrip();     // Сброс суточного пробега на экране расхода
-            UI.notifyTripReset(); // Визуальное уведомление
+    // 7. Обработка нажатий физической кнопки (одиночный, двойной клик, удержание)
+    ButtonAction btnAct = Sensors.getButtonAction();
+    if (btnAct == ButtonAction::CLICK) {
+        Serial.println("[BTN] Одиночный клик -> следующий экран");
+        UI.nextScreen();
+    } else if (btnAct == ButtonAction::DOUBLE_CLICK) {
+        Serial.println("[BTN] Двойной клик -> переключение датчика");
+        if (UI.getCurrentScreen() == ScreenId::GAUGE_SELECTOR || 
+            UI.getCurrentScreen() == ScreenId::SINGLE_GAUGE) {
+            UI.nextGaugeType();
+        }
+    } else if (btnAct == ButtonAction::HOLD) {
+        Serial.println("[BTN] Удержание кнопки (>1.0 сек)");
+        if (UI.getCurrentScreen() == ScreenId::GAUGE_SELECTOR) {
+            Serial.println("[BTN] Разворачиваем датчик на весь экран");
+            UI.setScreen(ScreenId::SINGLE_GAUGE);
         } else if (UI.getCurrentScreen() == ScreenId::SINGLE_GAUGE) {
-            UI.nextGaugeType();   // Переключение датчика при удержании на экране прибора
+            Serial.println("[BTN] Возврат в селектор приборов");
+            UI.setScreen(ScreenId::GAUGE_SELECTOR);
+        } else if (UI.getCurrentScreen() == ScreenId::OBC_TRIP_FUEL) {
+            Serial.println("[BTN] Сброс суточного одометра");
+            Trip.resetTrip();
+            UI.notifyTripReset();
         } else {
-            Sensors.resetVoltageExtremes(); // Сброс минимального пускового напряжения
+            Sensors.resetVoltageExtremes();
         }
     }
 

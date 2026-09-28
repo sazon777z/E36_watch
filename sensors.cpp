@@ -6,8 +6,12 @@ SensorsManager::SensorsManager()
     : filteredAdcRaw(0.0f),
       lastBtnState(HIGH),
       btnPressTime(0),
-      btnHandledShort(false),
-      btnHandledLong(false) {
+      lastReleaseTime(0),
+      pendingClickTime(0),
+      btnPressed(false),
+      btnHeldSent(false),
+      pendingClick(false),
+      currentAction(ButtonAction::NONE) {
     data.batteryVoltage = 12.6f;
     data.minCrankVoltage = 12.6f;
     data.maxVoltage = 12.6f;
@@ -41,6 +45,7 @@ void SensorsManager::update() {
     updateBatteryVoltage();
     updateIllumination();
     updateTemperatures();
+    updateButtonState();
 }
 
 void SensorsManager::updateBatteryVoltage() {
@@ -102,44 +107,71 @@ void SensorsManager::resetVoltageExtremes() {
     data.maxVoltage = data.batteryVoltage;
 }
 
-bool SensorsManager::isNextButtonPressed() {
+void SensorsManager::updateButtonState() {
     int b14 = digitalRead(PIN_BTN_NEXT);
     int b0 = digitalRead(PIN_BTN_BOOT);
     int btn = (b14 == LOW || b0 == LOW) ? LOW : HIGH;
-    bool pressedEvent = false;
+    unsigned long now = millis();
 
+    // Нажатие кнопки
     if (btn == LOW && lastBtnState == HIGH) {
-        // Нажатие кнопки
-        btnPressTime = millis();
-        btnHandledShort = false;
-        btnHandledLong = false;
-        Serial.printf("[BTN] Нажата кнопка! Источник: %s (GPIO14=%d, GPIO0=%d)\n",
-                      (b14 == LOW && b0 == LOW) ? "GPIO14 + GPIO0" : (b14 == LOW ? "GPIO14" : "BOOT(GPIO0)"),
-                      b14, b0);
-    } else if (btn == HIGH && lastBtnState == LOW) {
-        // Отпускание кнопки
-        unsigned long duration = millis() - btnPressTime;
-        Serial.printf("[BTN] Кнопка отпущена, длительность: %lu мс\n", duration);
-        if (duration >= 50 && duration < 800 && !btnHandledShort && !btnHandledLong) {
-            pressedEvent = true;
-            btnHandledShort = true;
+        btnPressTime = now;
+        btnPressed = true;
+        btnHeldSent = false;
+    }
+    // Кнопка удерживается
+    else if (btn == LOW && btnPressed) {
+        if (!btnHeldSent && (now - btnPressTime >= 1000)) {
+            btnHeldSent = true;
+            pendingClick = false;
+            currentAction = ButtonAction::HOLD;
+            Serial.println("[BTN] Кнопка удерживается (>1 сек) [HOLD]");
+        }
+    }
+    // Отпускание кнопки
+    else if (btn == HIGH && lastBtnState == LOW) {
+        unsigned long duration = now - btnPressTime;
+        btnPressed = false;
+
+        if (!btnHeldSent && duration >= 30 && duration < 700) {
+            // Проверяем: было ли недавнее отпускание для двойного клика?
+            if (pendingClick && (now - lastReleaseTime <= 300)) {
+                pendingClick = false;
+                currentAction = ButtonAction::DOUBLE_CLICK;
+                Serial.println("[BTN] Зафиксирован ДВОЙНОЙ КЛИК [DOUBLE_CLICK]");
+            } else {
+                pendingClick = true;
+                pendingClickTime = now;
+                lastReleaseTime = now;
+            }
+        }
+    }
+    // Если кнопка отпущена и ожидался возможный второй клик
+    else if (btn == HIGH && pendingClick) {
+        if (now - pendingClickTime > 280) {
+            pendingClick = false;
+            currentAction = ButtonAction::CLICK;
+            Serial.println("[BTN] Зафиксирован ОДИНОЧНЫЙ КЛИК [CLICK]");
         }
     }
 
     lastBtnState = btn;
-    return pressedEvent;
+}
+
+ButtonAction SensorsManager::getButtonAction() {
+    ButtonAction act = currentAction;
+    currentAction = ButtonAction::NONE;
+    return act;
+}
+
+bool SensorsManager::isNextButtonPressed() {
+    return currentAction == ButtonAction::CLICK;
+}
+
+bool SensorsManager::isNextButtonDoubleClicked() {
+    return currentAction == ButtonAction::DOUBLE_CLICK;
 }
 
 bool SensorsManager::isNextButtonHeld() {
-    int b14 = digitalRead(PIN_BTN_NEXT);
-    int b0 = digitalRead(PIN_BTN_BOOT);
-    int btn = (b14 == LOW || b0 == LOW) ? LOW : HIGH;
-
-    if (btn == LOW && !btnHandledLong) {
-        if (millis() - btnPressTime > 1200) {
-            btnHandledLong = true;
-            return true;
-        }
-    }
-    return false;
+    return currentAction == ButtonAction::HOLD;
 }

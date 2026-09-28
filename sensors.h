@@ -25,6 +25,13 @@ struct SensorData {
     Ms2Telemetry ms2;
 };
 
+enum class ButtonAction {
+    NONE = 0,
+    CLICK,
+    DOUBLE_CLICK,
+    HOLD
+};
+
 class SensorsManager {
 public:
     SensorsManager();
@@ -35,8 +42,10 @@ public:
     const SensorData& getData() const { return data; }
     void resetVoltageExtremes();
 
-    // Проверка кнопки переключения экранов
+    // Проверка кнопки переключения экранов и режимов
+    ButtonAction getButtonAction();
     bool isNextButtonPressed();
+    bool isNextButtonDoubleClicked();
     bool isNextButtonHeld();
 
 private:
@@ -46,9 +55,14 @@ private:
     // Кнопка
     int lastBtnState;
     unsigned long btnPressTime;
-    bool btnHandledShort;
-    bool btnHandledLong;
+    unsigned long lastReleaseTime;
+    unsigned long pendingClickTime;
+    bool btnPressed;
+    bool btnHeldSent;
+    bool pendingClick;
+    ButtonAction currentAction;
 
+    void updateButtonState();
     void updateBatteryVoltage();
     void updateIllumination();
     void updateTemperatures();

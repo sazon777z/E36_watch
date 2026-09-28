@@ -20,12 +20,13 @@ extern "C" {
 
 enum class ScreenId {
     BOOT_SPLASH = 0,
-    CLASSIC_CLOCK,
-    OBC_TRIP_FUEL,
-    OBC_TELEMETRY,
-    M_PERFORMANCE,
-    SINGLE_GAUGE,
-    SETTINGS_INFO,
+    CLASSIC_CLOCK,       // 1
+    OBC_TRIP_FUEL,       // 2
+    OBC_TELEMETRY,       // 3
+    M_PERFORMANCE,       // 4
+    GAUGE_SELECTOR,      // 5: Селектор/меню приборов
+    SINGLE_GAUGE,        // 6: Полноэкранный прибор (180° арка, шрифт 48)
+    SETTINGS_INFO,       // 7: Настройки и инфо
     COUNT
 };
 
@@ -85,6 +86,7 @@ private:
     lv_obj_t* scr_trip;
     lv_obj_t* scr_telem;
     lv_obj_t* scr_m_perf;
+    lv_obj_t* scr_gauge_menu;
     lv_obj_t* scr_gauge;
     lv_obj_t* scr_settings;
 
@@ -143,7 +145,17 @@ private:
     lv_obj_t* lbl_gps_sats_4;
     lv_obj_t* lbl_ms2_status_4;
 
-    // Виджеты Экрана 5: Полноэкранный круговой прибор (Single Gauge)
+    // Виджеты Экрана 5: Селектор / Меню выбора приборов
+    lv_obj_t* card_menu_preview;
+    lv_obj_t* lbl_menu_count;
+    lv_obj_t* lbl_menu_title;
+    lv_obj_t* lbl_menu_val;
+    lv_obj_t* lbl_menu_unit;
+    lv_obj_t* lbl_menu_hint;
+    lv_obj_t* lbl_gps_sats_menu;
+    lv_obj_t* lbl_ms2_status_menu;
+
+    // Виджеты Экрана 6: Полноэкранный круговой прибор (180° арка)
     GaugeType currentGauge;
     lv_obj_t* meter_gauge;
     lv_meter_scale_t* scale_gauge;
@@ -155,7 +167,7 @@ private:
     lv_obj_t* lbl_gps_sats_5;
     lv_obj_t* lbl_ms2_status_5;
 
-    // Виджеты Экрана 6: Настройки и инфо
+    // Виджеты Экрана 7: Настройки и инфо
     lv_obj_t* lbl_set_ble;
     lv_obj_t* lbl_set_can;
     lv_obj_t* lbl_set_gps;
@@ -166,6 +178,7 @@ private:
     void createScreenTrip();
     void createScreenTelem();
     void createScreenMPerf();
+    void createScreenGaugeMenu();
     void createScreenGauge();
     void createScreenSettings();
 
@@ -174,6 +187,7 @@ private:
     void updateTripScreen();
     void updateTelemScreen();
     void updateMPerfScreen();
+    void updateGaugeMenuScreen();
     void updateGaugeScreen();
     void updateSettingsScreen();
 
