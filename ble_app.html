@@ -217,9 +217,22 @@
             text-align: center;
         }
 
-        .btn-screen:active {
-            background: #222;
+        .input-warn {
+            width: 100%;
+            background: #151515;
+            border: 1px solid #333;
             color: #fff;
+            padding: 8px 6px;
+            font-size: 16px;
+            font-weight: 700;
+            border-radius: 4px;
+            margin-top: 4px;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        .input-warn:focus {
+            border-color: #0066ff;
         }
 
         .log-box {
@@ -322,6 +335,40 @@
             </div>
         </div>
 
+        <!-- Настройка порогов варнингов -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic;">ПОРОГИ ВАРНИНГОВ:</span>
+                <button style="background: none; border: 1px solid #444; color: #aaa; font-size: 10px; padding: 2px 8px; border-radius: 3px; cursor: pointer;" onclick="requestWarnings()">ПРОЧИТАТЬ</button>
+            </div>
+            
+            <div class="grid-2">
+                <div class="tele-card" style="text-align: left;">
+                    <div class="tele-label">НАДДУВ (MAX BAR)</div>
+                    <input type="number" id="inpWarnBoost" step="0.05" min="0.1" max="3.0" value="1.20" class="input-warn">
+                </div>
+                <div class="tele-card" style="text-align: left;">
+                    <div class="tele-label">ТЕМП. ОЖ (MAX °C)</div>
+                    <input type="number" id="inpWarnClt" step="1" min="50" max="130" value="100" class="input-warn">
+                </div>
+            </div>
+
+            <div class="grid-2" style="margin-top: 10px;">
+                <div class="tele-card" style="text-align: left;">
+                    <div class="tele-label">СМЕСЬ AFR (RICH MIN)</div>
+                    <input type="number" id="inpWarnAfrMin" step="0.1" min="8.0" max="14.0" value="10.5" class="input-warn">
+                </div>
+                <div class="tele-card" style="text-align: left;">
+                    <div class="tele-label">СМЕСЬ AFR (LEAN MAX)</div>
+                    <input type="number" id="inpWarnAfrMax" step="0.1" min="12.0" max="20.0" value="15.5" class="input-warn">
+                </div>
+            </div>
+
+            <button class="btn btn-primary" style="margin-top: 12px; padding: 12px;" onclick="saveWarnings()">
+                💾 Сохранить пороги в память
+            </button>
+        </div>
+
         <!-- Управление дисплеем -->
         <div class="card">
             <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic;">
@@ -389,8 +436,9 @@
                 setConnectedUI(true);
                 log('Подключено к BMW E36!');
 
-                // Запрос текущего статуса
+                // Запрос текущего статуса и порогов
                 sendCmd('status');
+                setTimeout(() => requestWarnings(), 300);
             } catch (err) {
                 log('Ошибка: ' + err.message);
                 setConnectedUI(false);
@@ -436,6 +484,7 @@
             if (text.startsWith('{') && text.endsWith('}')) {
                 try {
                     const data = JSON.parse(text);
+                    // Живая телеметрия
                     if (data.rpm !== undefined) document.getElementById('valRpm').textContent = data.rpm;
                     if (data.boost !== undefined) document.getElementById('valBoost').textContent = (data.boost >= 0 ? '+' : '') + data.boost.toFixed(2) + 'b';
                     if (data.clt !== undefined) document.getElementById('valClt').textContent = Math.round(data.clt) + '°C';
@@ -443,12 +492,45 @@
                     if (data.volt !== undefined) document.getElementById('valVolt').textContent = data.volt.toFixed(1) + 'V';
                     if (data.spd !== undefined) document.getElementById('valSpd').textContent = Math.round(data.spd);
                     if (data.trip !== undefined) document.getElementById('valTrip').textContent = data.trip.toFixed(1);
-                    if (data.odo !== undefined) document.getElementById('valOdo').textContent = Math.round(data.odo);
                     if (data.fuel !== undefined) document.getElementById('valFuel').textContent = data.fuel.toFixed(1);
+
+                    // Индикация тревоги по варнингам
+                    if (data.warn) {
+                        document.getElementById('valBoost').style.color = data.warn.b ? '#ff2222' : '#ffffff';
+                        document.getElementById('valClt').style.color = data.warn.c ? '#ff2222' : '#ffffff';
+                        document.getElementById('valAfr').style.color = data.warn.a ? '#ff2222' : '#ffffff';
+                    }
+
+                    // Пороги варнингов
+                    if (data.boost_max !== undefined) document.getElementById('inpWarnBoost').value = data.boost_max;
+                    if (data.clt_max !== undefined) document.getElementById('inpWarnClt').value = data.clt_max;
+                    if (data.afr_min !== undefined) document.getElementById('inpWarnAfrMin').value = data.afr_min;
+                    if (data.afr_max !== undefined) document.getElementById('inpWarnAfrMax').value = data.afr_max;
                 } catch (e) {}
             } else {
                 log('< ' + text);
             }
+        }
+
+        function requestWarnings() {
+            sendCmd('getwarn');
+        }
+
+        function saveWarnings() {
+            const b = parseFloat(document.getElementById('inpWarnBoost').value);
+            const c = parseFloat(document.getElementById('inpWarnClt').value);
+            const amin = parseFloat(document.getElementById('inpWarnAfrMin').value);
+            const amax = parseFloat(document.getElementById('inpWarnAfrMax').value);
+            
+            const payload = JSON.stringify({
+                boost_max: b,
+                clt_max: c,
+                afr_min: amin,
+                afr_max: amax,
+                warn_en: 1
+            });
+            sendCmd(payload);
+            log('Отправлены новые пороги варнингов...');
         }
 
         function syncExactTime() {
