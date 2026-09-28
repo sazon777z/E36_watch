@@ -67,6 +67,9 @@ static const char* getResetReasonStr(esp_reset_reason_t r) {
 
 void setup() {
     Serial.begin(115200);
+#if ARDUINO_USB_CDC_ON_BOOT
+    Serial.setTxTimeoutMs(0); // Предотвращает зависание ESP32-S3, если монитор порта закрыт или плата работает автономно в авто
+#endif
     delay(200);
 
     esp_reset_reason_t rstReason = esp_reset_reason();
