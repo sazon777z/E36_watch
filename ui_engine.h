@@ -76,8 +76,8 @@ private:
     unsigned long lastTickMillis;
     unsigned long tripResetNoticeMillis;
 
-    // LVGL дисплейный буфер (320 x 40 строк в SRAM)
-    static const uint32_t LV_BUF_LINES = 40;
+    // LVGL дисплейный буфер (320 x 80 строк в SRAM, вмещает крупные глифы 96px без сбоев нарезки)
+    static const uint32_t LV_BUF_LINES = 80;
     lv_disp_draw_buf_t draw_buf;
     lv_color_t buf_1[320 * LV_BUF_LINES];
     lv_disp_drv_t disp_drv;
@@ -153,6 +153,8 @@ private:
     lv_obj_t* lbl_digital_unit;
     lv_obj_t* lbl_digital_peak;
     lv_obj_t* lbl_digital_warn_limit;
+    lv_obj_t* lbl_ms2_status_5;
+    lv_obj_t* lbl_gps_sats_5;
 
     // Виджеты Экрана 6: Настройки и инфо
     lv_obj_t* lbl_set_ble;

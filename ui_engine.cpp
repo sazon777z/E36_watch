@@ -86,6 +86,8 @@ UiEngine::UiEngine()
       lbl_digital_unit(nullptr),
       lbl_digital_peak(nullptr),
       lbl_digital_warn_limit(nullptr),
+      lbl_ms2_status_5(nullptr),
+      lbl_gps_sats_5(nullptr),
       lbl_set_ble(nullptr),
       lbl_set_can(nullptr),
       lbl_set_gps(nullptr),
@@ -1185,15 +1187,21 @@ void UiEngine::createScreenGauge() {
     lv_obj_set_style_bg_color(scr_gauge, COLOR_LV_BLACK, 0);
     lv_obj_clear_flag(scr_gauge, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Крупная спортивная карточка на весь экран (300 x 220 px)
-    card_digital_gauge = createCardTile(scr_gauge, 10, 10, 300, 220);
+    // Статус MegaSquirt 2 в верхнем левом углу
+    lbl_ms2_status_5 = createMs2StatusLabel(scr_gauge);
 
-    // Сверху: Название прибора (шрифт Montserrat 20)
+    // Индикатор GPS в верхнем правом углу
+    lbl_gps_sats_5 = createGpsCornerLabel(scr_gauge);
+
+    // Крупная спортивная карточка (300 x 198 px, отступ сверху 32 px для строки статуса)
+    card_digital_gauge = createCardTile(scr_gauge, 10, 32, 300, 198);
+
+    // Сверху: Название прибора и номер (шрифт Montserrat 20)
     lbl_digital_title = lv_label_create(card_digital_gauge);
     lv_obj_set_style_text_font(lbl_digital_title, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(lbl_digital_title, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_digital_title, LV_ALIGN_TOP_MID, 0, 6);
-    lv_label_set_text(lbl_digital_title, "BOOST / TURBO");
+    lv_obj_align(lbl_digital_title, LV_ALIGN_TOP_MID, 0, 4);
+    lv_label_set_text(lbl_digital_title, "[1/7] BOOST / TURBO");
 
     // По центру: Максимально крупное цифровое значение (нативный 4bpp шрифт 96 px)
     lbl_digital_val = lv_label_create(card_digital_gauge);
@@ -1206,13 +1214,13 @@ void UiEngine::createScreenGauge() {
     lbl_digital_unit = lv_label_create(card_digital_gauge);
     lv_obj_set_style_text_font(lbl_digital_unit, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(lbl_digital_unit, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_digital_unit, LV_ALIGN_CENTER, 0, 42);
+    lv_obj_align(lbl_digital_unit, LV_ALIGN_CENTER, 0, 36);
     lv_label_set_text(lbl_digital_unit, "BAR");
 
     // Внизу слева: Пиковое значение за поездку (BMW Amber / Янтарный)
     lbl_digital_peak = lv_label_create(card_digital_gauge);
     lv_obj_set_size(lbl_digital_peak, 140, 20);
-    lv_obj_set_pos(lbl_digital_peak, 8, 188);
+    lv_obj_set_pos(lbl_digital_peak, 8, 168);
     lv_obj_set_style_text_font(lbl_digital_peak, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_digital_peak, lv_color_make(255, 170, 0), 0);
     lv_obj_set_style_text_align(lbl_digital_peak, LV_TEXT_ALIGN_LEFT, 0);
@@ -1222,7 +1230,7 @@ void UiEngine::createScreenGauge() {
     // Внизу справа: Сохраненные лимиты варнингов для данного прибора
     lbl_digital_warn_limit = lv_label_create(card_digital_gauge);
     lv_obj_set_size(lbl_digital_warn_limit, 140, 20);
-    lv_obj_set_pos(lbl_digital_warn_limit, 144, 188);
+    lv_obj_set_pos(lbl_digital_warn_limit, 144, 168);
     lv_obj_set_style_text_font(lbl_digital_warn_limit, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_digital_warn_limit, COLOR_LV_SILVER, 0);
     lv_obj_set_style_text_align(lbl_digital_warn_limit, LV_TEXT_ALIGN_RIGHT, 0);
@@ -1250,10 +1258,33 @@ void UiEngine::nextGaugeType() {
 
 void UiEngine::updateGaugeScreen() {
     const SensorData& sens = Sensors.getData();
+    const GpsData& gps = Gps.getData();
     const TripData& trip = Trip.getData();
     const TripPeaks& peaks = Trip.getPeaks();
     const WarningState& warn = Warnings.getState();
     const WarningSettings& ws = Warnings.getSettings();
+
+    // 1. Статус MegaSquirt 2 в верхнем левом углу
+    updateMs2StatusWidget(lbl_ms2_status_5, sens.ms2Online);
+
+    // 2. Индикатор спутников GPS в верхнем правом углу
+    static int lastSats5 = -99;
+    static bool lastFix5 = false;
+    if (lastSats5 != gps.satellites || lastFix5 != gps.hasFix) {
+        lastSats5 = gps.satellites;
+        lastFix5 = gps.hasFix;
+        if (gps.hasFix) {
+            lv_obj_set_style_text_color(lbl_gps_sats_5, COLOR_LV_WHITE, 0);
+            lv_label_set_text_fmt(lbl_gps_sats_5, LV_SYMBOL_GPS " %d", gps.satellites);
+        } else {
+            lv_obj_set_style_text_color(lbl_gps_sats_5, COLOR_LV_MID_GRAY, 0);
+            if (gps.satellites > 0) {
+                lv_label_set_text_fmt(lbl_gps_sats_5, LV_SYMBOL_GPS " %d", gps.satellites);
+            } else {
+                lv_label_set_text(lbl_gps_sats_5, LV_SYMBOL_GPS " --");
+            }
+        }
+    }
 
     // Заголовки и единицы обновляются ТОЛЬКО при смене типа прибора
     static GaugeType lastG = (GaugeType)-1;
@@ -1262,31 +1293,31 @@ void UiEngine::updateGaugeScreen() {
         lastG = currentGauge;
         switch (currentGauge) {
             case GaugeType::BOOST:
-                lv_label_set_text(lbl_digital_title, "BOOST / TURBO");
+                lv_label_set_text(lbl_digital_title, "[1/7] BOOST / TURBO");
                 lv_label_set_text(lbl_digital_unit, "BAR");
                 break;
             case GaugeType::COOLANT:
-                lv_label_set_text(lbl_digital_title, "COOLANT TEMP");
+                lv_label_set_text(lbl_digital_title, "[2/7] COOLANT TEMP");
                 lv_label_set_text(lbl_digital_unit, "\xC2\xB0 C");
                 break;
             case GaugeType::AFR:
-                lv_label_set_text(lbl_digital_title, "AIR / FUEL RATIO");
+                lv_label_set_text(lbl_digital_title, "[3/7] AIR / FUEL RATIO");
                 lv_label_set_text(lbl_digital_unit, "AFR");
                 break;
             case GaugeType::INST_FUEL:
-                lv_label_set_text(lbl_digital_title, "INSTANT FUEL");
+                lv_label_set_text(lbl_digital_title, "[4/7] INSTANT FUEL");
                 lv_label_set_text(lbl_digital_unit, trip.isLitersPerHour ? "L / HOUR" : "L / 100KM");
                 break;
             case GaugeType::SPEED:
-                lv_label_set_text(lbl_digital_title, "GPS SPEED");
+                lv_label_set_text(lbl_digital_title, "[5/7] GPS SPEED");
                 lv_label_set_text(lbl_digital_unit, "KM / H");
                 break;
             case GaugeType::INTAKE_TEMP:
-                lv_label_set_text(lbl_digital_title, "INTAKE AIR TEMP");
+                lv_label_set_text(lbl_digital_title, "[6/7] INTAKE AIR TEMP");
                 lv_label_set_text(lbl_digital_unit, "\xC2\xB0 C");
                 break;
             case GaugeType::RPM:
-                lv_label_set_text(lbl_digital_title, "TACHOMETER");
+                lv_label_set_text(lbl_digital_title, "[7/7] TACHOMETER");
                 lv_label_set_text(lbl_digital_unit, "RPM");
                 break;
             default: break;

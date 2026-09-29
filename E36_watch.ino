@@ -181,6 +181,10 @@ void loop() {
             Serial.println("[TEST] Тест завершен, LVGL экран перерисован.");
         } else if (c == 'b' || c == 'B') {
             Serial.println("[CMD] Подсветка зафиксирована на 100% (максимум)");
+        } else if (c == 'q' || c == 'Q') {
+            Serial.println("[CMD] Перезагрузка ESP32 (ESP.restart)...");
+            delay(100);
+            ESP.restart();
         } else if (c >= '1' && c <= '6') {
             ScreenId sid = (ScreenId)(c - '0');
             Serial.printf("[CMD] Прямой переход на экран %d\n", (int)sid);
