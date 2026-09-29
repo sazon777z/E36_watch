@@ -6,20 +6,18 @@ DisplayDriver::DisplayDriver()
     : spi(nullptr), tft(nullptr), currentBrightness(0), isInitialized(false) {
 }
 
-void DisplayDriver::initBacklightPWM() {
+void DisplayDriver::initBacklight() {
     pinMode(PIN_TFT_BL, OUTPUT);
-    digitalWrite(PIN_TFT_BL, HIGH); // Прямое гарантированное включение подсветки
+    digitalWrite(PIN_TFT_BL, HIGH); // Постоянная 100% максимальная яркость подсветки
     currentBrightness = 255;
 }
 
 void DisplayDriver::setBrightness(uint8_t brightness) {
-    currentBrightness = brightness;
+    (void)brightness;
+    // Подсветка всегда включена на 100%
     pinMode(PIN_TFT_BL, OUTPUT);
-    if (brightness > 0) {
-        digitalWrite(PIN_TFT_BL, HIGH);
-    } else {
-        digitalWrite(PIN_TFT_BL, LOW);
-    }
+    digitalWrite(PIN_TFT_BL, HIGH);
+    currentBrightness = 255;
 }
 
 bool DisplayDriver::init() {
@@ -32,7 +30,7 @@ bool DisplayDriver::init() {
     digitalWrite(PIN_TFT_RST, HIGH);
     delay(150);
 
-    initBacklightPWM();
+    initBacklight();
 
     // Инициализация аппаратного SPI на кастомных пинах ESP32-S3
     spi = new SPIClass(FSPI);
@@ -48,26 +46,18 @@ bool DisplayDriver::init() {
     tft->fillScreen(COLOR_BLACK);
 
     isInitialized = true;
-    setBrightness(DEFAULT_BRIGHTNESS);
+    setBrightness(255);
     return true;
 }
 
 void DisplayDriver::fadeIn(uint8_t targetBrightness, uint16_t delayMs) {
-    int start = currentBrightness;
-    for (int b = start; b <= targetBrightness; b += 5) {
-        setBrightness((uint8_t)(b > 255 ? 255 : b));
-        delay(delayMs);
-    }
-    setBrightness(targetBrightness);
+    (void)targetBrightness;
+    (void)delayMs;
+    setBrightness(255);
 }
 
 void DisplayDriver::fadeOut(uint16_t delayMs) {
-    int start = currentBrightness;
-    for (int b = start; b >= 0; b -= 5) {
-        setBrightness((uint8_t)(b < 0 ? 0 : b));
-        delay(delayMs);
-    }
-    setBrightness(0);
+    (void)delayMs;
 }
 
 void DisplayDriver::clear(uint16_t color) {

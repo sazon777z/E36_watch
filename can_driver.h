@@ -23,8 +23,10 @@ struct Ms2Telemetry {
     uint8_t engine_flags;   // Флаги состояния (cranking, warmup, etc.)
 
     // Диагностика связи CAN
+    float baro_kpa;         // Атмосферное (барометрическое) давление ЭБУ (кПа)
     bool isOnline;          // Флаг активного приема пакетов
     uint32_t packetsTotal;  // Всего принято пакетов
+    uint32_t busRecoveries; // Количество автовосстановлений шины после Bus-Off
     uint32_t lastPacketMs;  // Время последнего пакета (millis)
 };
 

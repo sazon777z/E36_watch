@@ -28,7 +28,7 @@ public:
 
     // Установка времени через BLE или вручную
     void setEpoch(time_t epoch);
-    void setManualTime(int year, int month, int day, int hour, int minute, int second);
+    void setManualTime(int year, int month, int day, int hour, int minute, int second, bool isSynced = true);
     void setTimeOnly(int hour, int minute, int second);
     void setDateOnly(int day, int month, int year);
 

@@ -19,7 +19,6 @@
 #define PIN_BTN_NEXT      14  // Внешняя кнопка переключения экранов (GPIO 14 к GND)
 #define PIN_BTN_BOOT      0   // Встроенная кнопка BOOT на плате ESP32-S3 (GPIO 0 к GND)
 #define PIN_ONEWIRE_TEMP  15  // Шина 1-Wire для датчика температуры DS18B20
-#define PIN_ILLUMINATION  16  // Вход сигнала габаритов/фар (для авто-диммирования)
 
 // =============================================================================
 // НАСТРОЙКИ CAN-ШИНЫ (WCMCU-230 / SN65HVD230) ДЛЯ MEGASQUIRT 2
@@ -54,9 +53,8 @@
 // 1 = Альбомная (320x240), 3 = Альбомная перевернутая, 0 = Портретная (240x320)
 #define DISPLAY_ROTATION  1   
 
-#define DEFAULT_BRIGHTNESS      220   // Яркость по умолчанию (0-255)
-#define NIGHT_BRIGHTNESS        50    // Яркость при включенных габаритах (0-255)
-#define FADE_STEP_DELAY_MS      4     // Скорость плавного розжига/затухания
+#define DEFAULT_BRIGHTNESS      255   // Постоянная максимальная яркость (100%)
+#define FADE_STEP_DELAY_MS      4
 
 // =============================================================================
 // НАСТРОЙКИ BLUETOOTH LOW ENERGY (BLE)

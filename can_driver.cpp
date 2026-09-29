@@ -30,9 +30,11 @@ CanDriver::CanDriver() : isDriverInstalled(false) {
     telemetry.afr = 14.7f;
     telemetry.afr_target = 14.7f;
     telemetry.map_kpa = 100.0f;
+    telemetry.baro_kpa = 100.0f;
     telemetry.boost_bar = 0.0f;
     telemetry.isOnline = false;
     telemetry.packetsTotal = 0;
+    telemetry.busRecoveries = 0;
     telemetry.lastPacketMs = 0;
 }
 
@@ -66,6 +68,26 @@ bool CanDriver::init() {
 
 void CanDriver::update() {
     if (!isDriverInstalled) return;
+
+    // Автоматическое восстановление CAN-контроллера при переходе в Bus-Off (помехи / стартер)
+    twai_status_info_t status;
+    if (twai_get_status_info(&status) == ESP_OK) {
+        if (status.state == TWAI_STATE_BUS_OFF) {
+            static unsigned long lastRecoveryAttempt = 0;
+            if (millis() - lastRecoveryAttempt > 1000) {
+                lastRecoveryAttempt = millis();
+                if (twai_initiate_recovery() == ESP_OK) {
+                    telemetry.busRecoveries++;
+                    Serial.printf("[CAN WARN] Обнаружен Bus-Off. Запущено автовосстановление шины (попытка %lu)\n",
+                                  telemetry.busRecoveries);
+                }
+            }
+        } else if (status.state == TWAI_STATE_STOPPED) {
+            if (twai_start() == ESP_OK) {
+                Serial.println("[CAN OK] TWAI контроллер успешно перезапущен после восстановления шины.");
+            }
+        }
+    }
 
     twai_message_t msg;
     // Считываем все накопившиеся в очереди CAN-пакеты (неблокирующий опрос)
@@ -117,8 +139,12 @@ void CanDriver::parseMs2RealtimeAdv(uint32_t canId, const uint8_t* d, uint8_t le
             break;
 
         case 1522: // Группа 2: барометр, MAP, MAT, CLT
+            telemetry.baro_kpa = (float)parseInt16BE(d) * 0.1f;
             telemetry.map_kpa = (float)parseInt16BE(d + 2) * 0.1f;
-            telemetry.boost_bar = (telemetry.map_kpa - 100.0f) / 100.0f;
+            {
+                float amb = (telemetry.baro_kpa >= 50.0f && telemetry.baro_kpa <= 120.0f) ? telemetry.baro_kpa : 100.0f;
+                telemetry.boost_bar = (telemetry.map_kpa - amb) / 100.0f;
+            }
             telemetry.mat_c = convertMs2Temp(parseInt16BE(d + 4));
             telemetry.clt_c = convertMs2Temp(parseInt16BE(d + 6));
             break;

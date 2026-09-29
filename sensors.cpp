@@ -18,7 +18,6 @@ SensorsManager::SensorsManager()
     data.voltStatus = VoltageStatus::VOLT_NORMAL_REST;
     data.tempOutdoor = 21.5f;
     data.tempCabin = 22.0f;
-    data.headlightsOn = false;
 }
 
 void SensorsManager::init() {
@@ -28,7 +27,6 @@ void SensorsManager::init() {
     }
     pinMode(PIN_BTN_NEXT, INPUT_PULLUP);
     pinMode(PIN_BTN_BOOT, INPUT_PULLUP);
-    pinMode(PIN_ILLUMINATION, INPUT_PULLDOWN);
 
     updateBatteryVoltage();
     data.minCrankVoltage = data.batteryVoltage;
@@ -43,7 +41,6 @@ void SensorsManager::update() {
     }
 
     updateBatteryVoltage();
-    updateIllumination();
     updateTemperatures();
     updateButtonState();
 }
@@ -92,11 +89,6 @@ void SensorsManager::updateBatteryVoltage() {
     }
 }
 
-void SensorsManager::updateIllumination() {
-    // Если на пине габаритов высокий уровень - включены фары
-    data.headlightsOn = (digitalRead(PIN_ILLUMINATION) == HIGH);
-}
-
 void SensorsManager::updateTemperatures() {
     // В базовой версии - температура с небольшим дрейфом или чтение DS18B20 при наличии
     // При подключении DS18B20 на PIN_ONEWIRE_TEMP здесь будет реальное значение
@@ -118,6 +110,13 @@ void SensorsManager::updateButtonState() {
         btnPressTime = now;
         btnPressed = true;
         btnHeldSent = false;
+
+        // Если ожидался второй клик и пауза между нажатиями <= 350 мс - фиксируем ДВОЙНОЙ КЛИК
+        if (pendingClick && (now - lastReleaseTime <= 350)) {
+            pendingClick = false;
+            currentAction = ButtonAction::DOUBLE_CLICK;
+            Serial.println("[BTN] Зафиксирован ДВОЙНОЙ КЛИК [DOUBLE_CLICK]");
+        }
     }
     // Кнопка удерживается
     else if (btn == LOW && btnPressed) {
@@ -133,20 +132,13 @@ void SensorsManager::updateButtonState() {
         unsigned long duration = now - btnPressTime;
         btnPressed = false;
 
-        if (!btnHeldSent && duration >= 30 && duration < 700) {
-            // Проверяем: было ли недавнее отпускание для двойного клика?
-            if (pendingClick && (now - lastReleaseTime <= 300)) {
-                pendingClick = false;
-                currentAction = ButtonAction::DOUBLE_CLICK;
-                Serial.println("[BTN] Зафиксирован ДВОЙНОЙ КЛИК [DOUBLE_CLICK]");
-            } else {
-                pendingClick = true;
-                pendingClickTime = now;
-                lastReleaseTime = now;
-            }
+        if (!btnHeldSent && currentAction != ButtonAction::DOUBLE_CLICK && duration >= 30 && duration < 700) {
+            pendingClick = true;
+            pendingClickTime = now;
+            lastReleaseTime = now;
         }
     }
-    // Если кнопка отпущена и ожидался возможный второй клик
+    // Если кнопка отпущена и второй клик не последовал
     else if (btn == HIGH && pendingClick) {
         if (now - pendingClickTime > 280) {
             pendingClick = false;

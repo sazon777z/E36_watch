@@ -8,6 +8,8 @@
 #include <BLE2902.h>
 #include "config.h"
 
+#include <vector>
+
 class BleManager {
 public:
     BleManager();
@@ -20,6 +22,7 @@ public:
     String getMacAddress() const { return macAddress; }
 
     void sendString(const String& str);
+    void queueCommand(const String& cmd);
     void processCommand(const String& cmd);
 
     // Внутренние методы обратного вызова
@@ -34,6 +37,9 @@ private:
     bool oldDeviceConnected;
     String macAddress;
     unsigned long lastTelemetryBroadcast;
+
+    std::vector<String> cmdQueue;
+    portMUX_TYPE cmdMux;
 };
 
 extern BleManager BleMgr;

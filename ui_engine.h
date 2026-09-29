@@ -74,6 +74,7 @@ private:
     bool colonState;
     unsigned long lastColonBlinkMillis;
     unsigned long lastTickMillis;
+    unsigned long tripResetNoticeMillis;
 
     // LVGL дисплейный буфер (320 x 40 строк в SRAM)
     static const uint32_t LV_BUF_LINES = 40;

@@ -33,7 +33,7 @@ private:
     uint8_t currentBrightness;
     bool isInitialized;
 
-    void initBacklightPWM();
+    void initBacklight();
 };
 
 extern DisplayDriver Display;

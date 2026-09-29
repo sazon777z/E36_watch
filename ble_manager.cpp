@@ -26,8 +26,8 @@ class RxCallbacks : public BLECharacteristicCallbacks {
         String rxValue = pCharacteristic->getValue().c_str();
         if (rxValue.length() > 0) {
             rxValue.trim();
-            Serial.printf("[BLE RX] Получена команда: %s\n", rxValue.c_str());
-            BleMgr.processCommand(rxValue);
+            // Помещаем команду в очередь для безопасного исполнения в основном потоке loop()
+            BleMgr.queueCommand(rxValue);
         }
     }
 };
@@ -39,11 +39,22 @@ BleManager::BleManager()
       deviceConnected(false),
       oldDeviceConnected(false),
       macAddress(""),
-      lastTelemetryBroadcast(0) {}
+      lastTelemetryBroadcast(0) {
+    cmdMux = portMUX_INITIALIZER_UNLOCKED;
+}
+
+void BleManager::queueCommand(const String& cmd) {
+    portENTER_CRITICAL(&cmdMux);
+    cmdQueue.push_back(cmd);
+    portEXIT_CRITICAL(&cmdMux);
+}
 
 void BleManager::init() {
     Serial.printf("[BLE] Инициализация BLE: %s\n", BLE_DEVICE_NAME);
     BLEDevice::init(BLE_DEVICE_NAME);
+
+    // Устанавливаем увеличенный MTU для длинных JSON пакетов телеметрии
+    BLEDevice::setMTU(512);
 
     // Получаем MAC-адрес
     macAddress = BLEDevice::getAddress().toString().c_str();
@@ -81,11 +92,23 @@ void BleManager::init() {
     pAdvertising->setMinPreferred(0x12);
     BLEDevice::startAdvertising();
 
-    Serial.printf("[BLE OK] Имя: %s | MAC: %s | Ожидание подключения...\n", 
+    Serial.printf("[BLE OK] Имя: %s | MAC: %s | MTU: 512 | Ожидание подключения...\n", 
                   BLE_DEVICE_NAME, macAddress.c_str());
 }
 
 void BleManager::update() {
+    // Безопасная обработка отложенных BLE команд в основном потоке (исключает сбои графики LVGL)
+    std::vector<String> cmdsToProcess;
+    portENTER_CRITICAL(&cmdMux);
+    if (!cmdQueue.empty()) {
+        cmdsToProcess.swap(cmdQueue);
+    }
+    portEXIT_CRITICAL(&cmdMux);
+
+    for (const auto& cmd : cmdsToProcess) {
+        processCommand(cmd);
+    }
+
     // Обработка переподключения при разрыве связи
     if (!deviceConnected && oldDeviceConnected) {
         delay(200); // пауза для стабилизации стека Bluetooth
@@ -184,14 +207,11 @@ void BleManager::processCommand(const String& cmd) {
         }
     }
     else if (c.startsWith("bright ")) {
-        // Регулировка яркости экрана: bright 0..255
-        int br = c.substring(7).toInt();
-        br = constrain(br, 0, 255);
-        Display.setBrightness((uint8_t)br);
+        // Подсветка зафиксирована на 100% максимальной яркости
         char buf[32];
-        snprintf(buf, sizeof(buf), "OK: BRIGHTNESS %d\n", br);
+        snprintf(buf, sizeof(buf), "OK: BRIGHTNESS 255\n");
         sendString(buf);
-        Serial.printf("[BLE] Установлена яркость: %d\n", br);
+        Serial.println("[BLE] Яркость зафиксирована на 100% (максимум)");
     }
     else if (c.startsWith("screen ")) {
         // Переключение экрана: screen 1..6

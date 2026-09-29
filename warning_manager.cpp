@@ -102,10 +102,19 @@ void WarningManager::update(const SensorData& sens) {
     state.cltAlarm = (curClt >= settings.clt_max_c);
 
     // 3. Смесь (AFR)
-    // Предупреждение о смеси активно только когда мотор заведен (RPM >= 500)
-    // и датчик ШЛЗ выдает достоверные показания (AFR >= 9.0)
-    if (sens.ms2Online && sens.ms2.rpm >= 500 && sens.ms2.afr >= 9.0f) {
-        state.afrAlarm = (sens.ms2.afr >= settings.afr_lean_max || sens.ms2.afr <= settings.afr_rich_min);
+    // Предупреждение о смеси активно только когда мотор заведен (RPM >= 600)
+    // и датчик ШЛЗ выдает достоверные показания (AFR >= 9.0 и AFR <= 22.0).
+    // Защита от ложных срабатываний: при торможении двигателем и отсечке топлива (Overrun Fuel Cut)
+    // форсунки закрыты, и датчик фиксирует обеднение смеси (20-22 AFR) - это штатная работа ЭБУ.
+    if (sens.ms2Online && sens.ms2.rpm >= 600 && sens.ms2.afr >= 9.0f && sens.ms2.afr <= 22.0f) {
+        bool isRich = (sens.ms2.afr <= settings.afr_rich_min);
+        
+        // Бедная смесь опасна только под нагрузкой (педаль нажата или давление во впуске):
+        bool isEngineUnderLoad = (sens.ms2.pw1_us >= 1100) && 
+                                 (sens.ms2.tps_pct > 5.0f || sens.ms2.map_kpa > 70.0f || sens.ms2.boost_bar > -0.10f);
+        
+        bool isLean = (sens.ms2.afr >= settings.afr_lean_max) && isEngineUnderLoad;
+        state.afrAlarm = isRich || isLean;
     } else {
         state.afrAlarm = false;
     }

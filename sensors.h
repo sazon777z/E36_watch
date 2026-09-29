@@ -20,7 +20,6 @@ struct SensorData {
     VoltageStatus voltStatus;
     float tempOutdoor;
     float tempCabin;
-    bool headlightsOn;
     bool ms2Online;
     Ms2Telemetry ms2;
 };
@@ -64,7 +63,6 @@ private:
 
     void updateButtonState();
     void updateBatteryVoltage();
-    void updateIllumination();
     void updateTemperatures();
 };
 

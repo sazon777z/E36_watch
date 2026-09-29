@@ -13,15 +13,18 @@
  *   BL         -> GPIO 8 (ШИМ регулировка яркости)
  * 
  * CAN-ШИНА MEGASQUIRT 2 (WCMCU-230 / SN65HVD230):
- *   CTX (CAN TX) -> GPIO 43 (вывод TX платы ESP32-S3)
- *   CRX (CAN RX) -> GPIO 44 (вывод RX платы ESP32-S3)
+ *   CTX (CAN TX) -> GPIO 6
+ *   CRX (CAN RX) -> GPIO 7
  *   3V3          -> 3.3V (питание)
  *   GND          -> GND (земля)
  * 
- * ОПЦИОНАЛЬНЫЕ ВХОДЫ:
- *   ADC АКБ 12V -> GPIO 7 (через делитель напряжения)
- *   КНОПКА      -> GPIO 14 (кнопка переключения экранов)
- *   ГАБАРИТЫ    -> GPIO 16 (сигнал фар для ночного режима)
+ * GPS-МОДУЛЬ U-BLOX NEO-7M:
+ *   TX GPS       -> GPIO 44 (RX1 платы ESP32-S3)
+ *   RX GPS       -> GPIO 43 (TX1 платы ESP32-S3)
+ * 
+ * КНОПКИ УПРАВЛЕНИЯ:
+ *   КНОПКА      -> GPIO 14 (кнопка переключения экранов к GND)
+ *   BOOT        -> GPIO 0 (встроенная кнопка платы)
  * ============================================================================
  */
 
@@ -137,17 +140,6 @@ void loop() {
         lastSensorUpdate = currentMillis;
         Sensors.update();
         Warnings.update(Sensors.getData());
-
-        // Автоматическое диммирование при включении габаритов
-        if (Sensors.getData().headlightsOn) {
-            if (Display.getBrightness() != NIGHT_BRIGHTNESS) {
-                Display.setBrightness(NIGHT_BRIGHTNESS);
-            }
-        } else {
-            if (Display.getBrightness() != DEFAULT_BRIGHTNESS) {
-                Display.setBrightness(DEFAULT_BRIGHTNESS);
-            }
-        }
     }
 
     // 6. Обработка команд через Serial (диагностика и стендовое тестирование)
@@ -175,9 +167,7 @@ void loop() {
             Trip.resetTrip();
             UI.notifyTripReset();
         } else if (c == 't' || c == 'T') {
-            Serial.printf("[TEST] Тест TFT: Текущая яркость=%d, Габариты=%d, заливаем красным...\n", 
-                          Display.getBrightness(), Sensors.getData().headlightsOn);
-            Display.setBrightness(255);
+            Serial.println("[TEST] Тест TFT: заливаем базовыми цветами...");
             Display.getTft().fillScreen(0xF800); // Красный
             delay(1000);
             Display.getTft().fillScreen(0x07E0); // Зеленый
@@ -188,8 +178,7 @@ void loop() {
             lv_obj_invalidate(lv_scr_act());
             Serial.println("[TEST] Тест завершен, LVGL экран перерисован.");
         } else if (c == 'b' || c == 'B') {
-            Serial.printf("[CMD] Яркость была %d, принудительно ставим 255!\n", Display.getBrightness());
-            Display.setBrightness(255);
+            Serial.println("[CMD] Подсветка зафиксирована на 100% (максимум)");
         } else if (c >= '1' && c <= '6') {
             ScreenId sid = (ScreenId)(c - '0');
             Serial.printf("[CMD] Прямой переход на экран %d\n", (int)sid);

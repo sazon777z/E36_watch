@@ -9,9 +9,10 @@ static Preferences prefs;
 TripComputer::TripComputer()
     : lastUpdateMillis(0),
       lastSaveMillis(0),
-      lastSavedOdoKm(0.0f) {
+      lastSavedOdoKm(0.0),
+      tripTimeAccumSec(0.0f) {
     memset(&data, 0, sizeof(TripData));
-    data.total_odometer_km = 245000.0f; // Значение по умолчанию
+    data.total_odometer_km = 245000.0; // Значение по умолчанию
     data.isLitersPerHour = true;
     resetPeaks();
 }
@@ -20,15 +21,30 @@ void TripComputer::init() {
     loadFromNvs();
     lastUpdateMillis = millis();
     lastSaveMillis = millis();
-    Serial.printf("[TRIP] Инициализация: Общий одометр = %.1f км, Суточный = %.2f км\n",
+    Serial.printf("[TRIP] Инициализация: Общий одометр = %.2f км, Суточный = %.2f км\n",
                   data.total_odometer_km, data.trip_distance_km);
 }
 
 void TripComputer::loadFromNvs() {
     prefs.begin("e36_trip", false);
-    data.total_odometer_km = prefs.getFloat("total_km", 245000.0f);
-    data.trip_distance_km = prefs.getFloat("trip_km", 0.0f);
-    data.trip_fuel_liters = prefs.getFloat("trip_fuel", 0.0f);
+    if (prefs.isKey("total_km_d")) {
+        data.total_odometer_km = prefs.getDouble("total_km_d", 245000.0);
+    } else {
+        data.total_odometer_km = (double)prefs.getFloat("total_km", 245000.0f);
+    }
+
+    if (prefs.isKey("trip_km_d")) {
+        data.trip_distance_km = prefs.getDouble("trip_km_d", 0.0);
+    } else {
+        data.trip_distance_km = (double)prefs.getFloat("trip_km", 0.0f);
+    }
+
+    if (prefs.isKey("trip_fuel_d")) {
+        data.trip_fuel_liters = prefs.getDouble("trip_fuel_d", 0.0);
+    } else {
+        data.trip_fuel_liters = (double)prefs.getFloat("trip_fuel", 0.0f);
+    }
+
     data.trip_time_sec = prefs.getUInt("trip_time", 0);
     prefs.end();
 
@@ -38,17 +54,20 @@ void TripComputer::loadFromNvs() {
 void TripComputer::saveToNvs(bool force) {
     // Сохраняем во Flash только при приросте от 1 км или по таймеру раз в 5 минут,
     // чтобы сберечь ресурс циклов перезаписи памяти EEPROM/NVS
-    if (force || (data.total_odometer_km - lastSavedOdoKm >= 1.0f) || (millis() - lastSaveMillis > 300000UL)) {
+    if (force || (data.total_odometer_km - lastSavedOdoKm >= 1.0) || (millis() - lastSaveMillis > 300000UL)) {
         prefs.begin("e36_trip", false);
-        prefs.putFloat("total_km", data.total_odometer_km);
-        prefs.putFloat("trip_km", data.trip_distance_km);
-        prefs.putFloat("trip_fuel", data.trip_fuel_liters);
+        prefs.putDouble("total_km_d", data.total_odometer_km);
+        prefs.putFloat("total_km", (float)data.total_odometer_km);
+        prefs.putDouble("trip_km_d", data.trip_distance_km);
+        prefs.putFloat("trip_km", (float)data.trip_distance_km);
+        prefs.putDouble("trip_fuel_d", data.trip_fuel_liters);
+        prefs.putFloat("trip_fuel", (float)data.trip_fuel_liters);
         prefs.putUInt("trip_time", data.trip_time_sec);
         prefs.end();
 
         lastSavedOdoKm = data.total_odometer_km;
         lastSaveMillis = millis();
-        Serial.printf("[TRIP NVS] Сохранен одометр: %.1f км\n", data.total_odometer_km);
+        Serial.printf("[TRIP NVS] Сохранен одометр: %.2f км\n", data.total_odometer_km);
     }
 }
 
@@ -64,21 +83,22 @@ void TripComputer::resetPeaks() {
 }
 
 void TripComputer::resetTrip() {
-    data.trip_distance_km = 0.0f;
-    data.trip_fuel_liters = 0.0f;
+    data.trip_distance_km = 0.0;
+    data.trip_fuel_liters = 0.0;
     data.avg_consumption_l_100km = 0.0f;
     data.trip_time_sec = 0;
     data.avg_speed_kmh = 0.0f;
+    tripTimeAccumSec = 0.0f;
     resetPeaks();
     saveToNvs(true);
     Serial.println("[TRIP] Суточный одометр и пиковые значения сброшены.");
 }
 
-void TripComputer::setTotalOdometer(float km) {
-    if (km >= 0.0f) {
+void TripComputer::setTotalOdometer(double km) {
+    if (km >= 0.0) {
         data.total_odometer_km = km;
         saveToNvs(true);
-        Serial.printf("[TRIP] Установлен общий пробег: %.1f км\n", km);
+        Serial.printf("[TRIP] Установлен общий пробег: %.2f км\n", km);
     }
 }
 
@@ -122,18 +142,26 @@ void TripComputer::update() {
 
     // 2. Расчет пройденной дистанции (при скорости > 1.8 км/ч отсекаем шум GPS стоянки)
     if (data.current_speed_kmh > 1.8f) {
-        float deltaKm = data.current_speed_kmh * (dt / 3600.0f);
+        double deltaKm = (double)data.current_speed_kmh * ((double)dt / 3600.0);
         data.trip_distance_km += deltaKm;
         data.total_odometer_km += deltaKm;
-        data.trip_time_sec += (uint32_t)dt;
+        
+        // Накопление времени движения в поездке (в секундах)
+        tripTimeAccumSec += dt;
+        if (tripTimeAccumSec >= 1.0f) {
+            uint32_t fullSec = (uint32_t)tripTimeAccumSec;
+            data.trip_time_sec += fullSec;
+            tripTimeAccumSec -= (float)fullSec;
+        }
     }
 
     // 3. Расчет расхода топлива
     float fuelRateLh = getFuelRateLitersPerHour();
 
     if (fuelRateLh > 0.05f) {
-        // Накапливаем общий расход в поездке
-        data.trip_fuel_liters += fuelRateLh * (dt / 3600.0f);
+        // Накапливаем общий расход в поездке с двойной точностью
+        double deltaFuel = (double)fuelRateLh * ((double)dt / 3600.0);
+        data.trip_fuel_liters += deltaFuel;
 
         // Мгновенный расход (аутентичная логика BMW OBC)
         if (data.current_speed_kmh > 3.0f) {
@@ -152,13 +180,13 @@ void TripComputer::update() {
     }
 
     // 4. Средний расход за поездку (L / 100 km)
-    if (data.trip_distance_km >= 0.05f) {
-        data.avg_consumption_l_100km = (data.trip_fuel_liters / data.trip_distance_km) * 100.0f;
+    if (data.trip_distance_km >= 0.05) {
+        data.avg_consumption_l_100km = (float)((data.trip_fuel_liters / data.trip_distance_km) * 100.0);
     }
 
     // 5. Средняя скорость
-    if (data.trip_time_sec > 5) {
-        data.avg_speed_kmh = (data.trip_distance_km / (float)data.trip_time_sec) * 3600.0f;
+    if (data.trip_time_sec > 3) {
+        data.avg_speed_kmh = (float)((data.trip_distance_km / (double)data.trip_time_sec) * 3600.0);
     }
 
     // 6. Обновление пиковых параметров за поездку

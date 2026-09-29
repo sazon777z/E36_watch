@@ -25,6 +25,7 @@ UiEngine::UiEngine()
       colonState(true),
       lastColonBlinkMillis(0),
       lastTickMillis(0),
+      tripResetNoticeMillis(0),
       scr_clock(nullptr),
       scr_trip(nullptr),
       scr_telem(nullptr),
@@ -92,7 +93,7 @@ UiEngine::UiEngine()
 }
 
 // -----------------------------------------------------------------------------
-// Callback сброса буфера кадра LVGL на дисплей ST7789 через SPI 40 МГц
+// Callback сброса буфера кадра LVGL на дисплей ST7789 через SPI
 // -----------------------------------------------------------------------------
 void UiEngine::dispFlushCb(lv_disp_drv_t* disp_drv, const lv_area_t* area, lv_color_t* color_p) {
     static uint32_t flushCount = 0;
@@ -117,7 +118,14 @@ void UiEngine::dispFlushCb(lv_disp_drv_t* disp_drv, const lv_area_t* area, lv_co
 // Вспомогательная функция применения тревожного мигания карточки при варнинге
 static void applyCardWarning(lv_obj_t* card, bool isAlarm, bool blinkPhase) {
     if (!card) return;
-    if (isAlarm && blinkPhase) {
+    uintptr_t targetState = (isAlarm && blinkPhase) ? 1 : 0;
+    uintptr_t currentState = (uintptr_t)lv_obj_get_user_data(card);
+    if (targetState == currentState) {
+        return; // Стиль уже применен, исключаем паразитную инвалидацию LVGL и SPI трафик
+    }
+    lv_obj_set_user_data(card, (void*)targetState);
+
+    if (targetState == 1) {
         // Резкая, стробоскопическая заливка всей карточки ярко-красным цветом ///M Red
         lv_obj_set_style_bg_color(card, lv_color_make(220, 20, 30), 0);
         lv_obj_set_style_border_color(card, lv_color_make(255, 255, 255), 0);
@@ -405,6 +413,7 @@ void UiEngine::notifyTripReset() {
     if (lbl_trip_reset_hint) {
         lv_label_set_text(lbl_trip_reset_hint, "RESET OK!");
         lv_obj_set_style_text_color(lbl_trip_reset_hint, COLOR_LV_ONLINE, 0);
+        tripResetNoticeMillis = millis();
     }
 }
 
@@ -857,6 +866,15 @@ void UiEngine::updateTripScreen() {
         lv_label_set_text(lbl_trip_avg, "---");
     }
     lv_label_set_text_fmt(lbl_trip_fuel, "%.1f L", trip.trip_fuel_liters);
+
+    // Автоматический возврат подсказки [HOLD RST] через 2.5 сек после сброса
+    if (tripResetNoticeMillis > 0 && (millis() - tripResetNoticeMillis >= 2500)) {
+        tripResetNoticeMillis = 0;
+        if (lbl_trip_reset_hint) {
+            lv_label_set_text(lbl_trip_reset_hint, "[HOLD RST]");
+            lv_obj_set_style_text_color(lbl_trip_reset_hint, COLOR_LV_MID_GRAY, 0);
+        }
+    }
 }
 
 void UiEngine::updateTelemScreen() {

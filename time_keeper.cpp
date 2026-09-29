@@ -16,7 +16,7 @@ TimeKeeper::TimeKeeper() : timeSynced(false), timezoneOffset(DEFAULT_TIMEZONE_OF
 void TimeKeeper::init() {
     loadTimezoneFromNvs();
     // Начальное время по умолчанию (если нет синхронизации)
-    setManualTime(2026, 8, 30, 12, 0, 0);
+    setManualTime(2026, 8, 30, 12, 0, 0, false);
     update();
 }
 
@@ -127,7 +127,7 @@ void TimeKeeper::setDateOnly(int day, int month, int year) {
     update();
 }
 
-void TimeKeeper::setManualTime(int year, int month, int day, int hour, int minute, int second) {
+void TimeKeeper::setManualTime(int year, int month, int day, int hour, int minute, int second, bool isSynced) {
     struct tm t;
     t.tm_year = year - 1900;
     t.tm_mon = month - 1;
@@ -140,6 +140,7 @@ void TimeKeeper::setManualTime(int year, int month, int day, int hour, int minut
     time_t t_of_day = mktime(&t);
     struct timeval tv = { .tv_sec = t_of_day, .tv_usec = 0 };
     settimeofday(&tv, NULL);
+    timeSynced = isSynced;
     update();
 }
 
