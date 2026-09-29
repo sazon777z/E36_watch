@@ -24,7 +24,7 @@ bool DisplayDriver::init() {
     // Надежный аппаратный сброс контроллера ST7789
     pinMode(PIN_TFT_RST, OUTPUT);
     digitalWrite(PIN_TFT_RST, HIGH);
-    delay(20);
+    delay(50);
     digitalWrite(PIN_TFT_RST, LOW);
     delay(50);
     digitalWrite(PIN_TFT_RST, HIGH);
@@ -41,7 +41,7 @@ bool DisplayDriver::init() {
 
     // Стандартная инициализация ST7789 для дисплея 240x320
     tft->init(240, 320);
-    tft->setSPISpeed(27000000); // 27 MHz SPI - гарантированная стабильность и отсутствие помех
+    tft->setSPISpeed(20000000); // 20 MHz SPI - гарантированная стабильность фронтов без звона и срывов
     tft->setRotation(DISPLAY_ROTATION);
     tft->fillScreen(COLOR_BLACK);
 

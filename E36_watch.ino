@@ -117,6 +117,8 @@ void setup() {
     lv_timer_handler();
 
     Serial.println("[OK] Система готова к работе.");
+    Serial.printf("[MEM] Free Heap: %u bytes, Free PSRAM: %u bytes\n", 
+                  (unsigned int)ESP.getFreeHeap(), (unsigned int)ESP.getFreePsram());
     Serial.println("[OK] UI v2.5: Цифровой прибор (пик и лимит в нижних углах карточки).");
 }
 
@@ -213,8 +215,8 @@ void loop() {
     // 5. Обновление системного времени
     Time.update();
 
-    // 6. Отрисовка графического интерфейса UI через LVGL (каждые 25 мс, 40 FPS)
-    if (currentMillis - lastUiUpdate >= 25) {
+    // 6. Отрисовка графического интерфейса UI через LVGL (каждые 50 мс, 20 FPS)
+    if (currentMillis - lastUiUpdate >= 50) {
         lastUiUpdate = currentMillis;
         UI.update();
     }
