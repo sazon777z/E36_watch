@@ -15,7 +15,7 @@
 // Объявления кастомных 4bpp сглаженных шрифтов
 extern "C" {
     extern const lv_font_t lv_font_clock_70;
-    // lv_font_clock_96 исключен из-за нестабильности нарезки буфера глифов
+    extern const lv_font_t lv_font_clock_96;
     extern const lv_font_t lv_font_telemetry_24;
 }
 
@@ -76,8 +76,8 @@ private:
     unsigned long lastTickMillis;
     unsigned long tripResetNoticeMillis;
 
-    // LVGL дисплейный буфер (320 x 40 строк в SRAM - быстрый, стабильный без задержек по SPI)
-    static const uint32_t LV_BUF_LINES = 40;
+    // LVGL дисплейный буфер (320 x 80 строк в SRAM, вмещает крупные глифы 96px без сбоев нарезки)
+    static const uint32_t LV_BUF_LINES = 80;
     lv_disp_draw_buf_t draw_buf;
     lv_color_t buf_1[320 * LV_BUF_LINES];
     lv_disp_drv_t disp_drv;
