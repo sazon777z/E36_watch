@@ -687,6 +687,8 @@ void UiEngine::nextScreen() {
     setScreen((ScreenId)next);
 }
 
+static bool gaugeScreenNeedsRefresh = true;
+
 void UiEngine::setScreen(ScreenId screen) {
     if (currentScreen != screen) {
         currentScreen = screen;
@@ -696,7 +698,7 @@ void UiEngine::setScreen(ScreenId screen) {
             case ScreenId::OBC_TRIP_FUEL:  target = scr_trip; break;
             case ScreenId::OBC_TELEMETRY:  target = scr_telem; break;
             case ScreenId::M_PERFORMANCE:  target = scr_m_perf; break;
-            case ScreenId::SINGLE_GAUGE:   target = scr_gauge; break;
+            case ScreenId::SINGLE_GAUGE:   target = scr_gauge; gaugeScreenNeedsRefresh = true; break;
             case ScreenId::SETTINGS_INFO:  target = scr_settings; break;
             default: target = scr_clock; break;
         }
@@ -1203,11 +1205,11 @@ void UiEngine::createScreenGauge() {
     lv_obj_align(lbl_digital_title, LV_ALIGN_TOP_MID, 0, 4);
     lv_label_set_text(lbl_digital_title, "[1/7] BOOST / TURBO");
 
-    // По центру: Максимально крупное цифровое значение (нативный 4bpp шрифт 96 px)
+    // По центру: Крупное четкое цифровое значение (проверенный стабильный 4bpp шрифт 70 px)
     lbl_digital_val = lv_label_create(card_digital_gauge);
-    lv_obj_set_style_text_font(lbl_digital_val, &lv_font_clock_96, 0);
+    lv_obj_set_style_text_font(lbl_digital_val, &lv_font_clock_70, 0);
     lv_obj_set_style_text_color(lbl_digital_val, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_digital_val, LV_ALIGN_CENTER, 0, -10);
+    lv_obj_align(lbl_digital_val, LV_ALIGN_CENTER, 0, -8);
     lv_label_set_text(lbl_digital_val, "0.00");
 
     // Под цифрами: Единица измерения
@@ -1286,9 +1288,10 @@ void UiEngine::updateGaugeScreen() {
         }
     }
 
-    // Заголовки и единицы обновляются ТОЛЬКО при смене типа прибора
+    // Заголовки и единицы обновляются ТОЛЬКО при смене типа прибора или первом показе экрана
     static GaugeType lastG = (GaugeType)-1;
-    bool gaugeChanged = (currentGauge != lastG);
+    bool gaugeChanged = (currentGauge != lastG) || gaugeScreenNeedsRefresh;
+    gaugeScreenNeedsRefresh = false;
     if (gaugeChanged) {
         lastG = currentGauge;
         switch (currentGauge) {
