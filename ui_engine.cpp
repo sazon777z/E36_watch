@@ -687,8 +687,6 @@ void UiEngine::nextScreen() {
     setScreen((ScreenId)next);
 }
 
-static bool gaugeScreenNeedsRefresh = true;
-
 void UiEngine::setScreen(ScreenId screen) {
     if (currentScreen != screen) {
         currentScreen = screen;
@@ -698,7 +696,7 @@ void UiEngine::setScreen(ScreenId screen) {
             case ScreenId::OBC_TRIP_FUEL:  target = scr_trip; break;
             case ScreenId::OBC_TELEMETRY:  target = scr_telem; break;
             case ScreenId::M_PERFORMANCE:  target = scr_m_perf; break;
-            case ScreenId::SINGLE_GAUGE:   target = scr_gauge; gaugeScreenNeedsRefresh = true; break;
+            case ScreenId::SINGLE_GAUGE:   target = scr_gauge; break;
             case ScreenId::SETTINGS_INFO:  target = scr_settings; break;
             default: target = scr_clock; break;
         }
@@ -1288,10 +1286,9 @@ void UiEngine::updateGaugeScreen() {
         }
     }
 
-    // Заголовки и единицы обновляются ТОЛЬКО при смене типа прибора или первом показе экрана
+    // Заголовки и единицы обновляются ТОЛЬКО при смене типа прибора
     static GaugeType lastG = (GaugeType)-1;
-    bool gaugeChanged = (currentGauge != lastG) || gaugeScreenNeedsRefresh;
-    gaugeScreenNeedsRefresh = false;
+    bool gaugeChanged = (currentGauge != lastG);
     if (gaugeChanged) {
         lastG = currentGauge;
         switch (currentGauge) {
