@@ -44,11 +44,9 @@ bool DisplayDriver::init() {
     delay(150);
 
     // 3. Инициализация аппаратного SPI на кастомных пинах ESP32-S3
-    // Передаем SS = -1, так как библиотека Adafruit_SPITFT управляет пином CS (GPIO 9) вручную.
-    // Это исключает захват пина аппаратным модулем SPI и устраняет черный экран при аппаратном сбросе.
     if (!spi) {
         spi = new SPIClass(FSPI);
-        spi->begin(PIN_TFT_SCL, -1, PIN_TFT_SDA, -1);
+        spi->begin(PIN_TFT_SCL, -1, PIN_TFT_SDA, PIN_TFT_CS);
     }
 
     if (!tft) {
