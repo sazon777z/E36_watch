@@ -322,27 +322,32 @@ void UiEngine::createScreenTrip() {
     lbl_ms2_status_2 = createMs2StatusLabel(scr_trip);
     lbl_gps_sats_2 = createGpsCornerLabel(scr_trip);
 
-    // Верхняя плитка скорости и мгновенного расхода
+    // Верхняя плитка скорости и мгновенного расхода (разделена на 2 независимые зоны)
     lv_obj_t* top_card = createCardTile(scr_trip, 10, 32, 300, 66);
 
+    // Левая зона: Спидометр
     lbl_trip_spd = lv_label_create(top_card);
     lv_obj_set_style_text_font(lbl_trip_spd, &lv_font_clock_70, 0);
     lv_obj_set_style_text_color(lbl_trip_spd, COLOR_LV_WHITE, 0);
-    lv_obj_set_pos(lbl_trip_spd, 8, 4);
-    lv_label_set_text(lbl_trip_spd, "  0");
+    lv_obj_set_pos(lbl_trip_spd, 10, 4);
+    lv_label_set_text(lbl_trip_spd, "0");
 
     lv_obj_t* t_kmh = lv_label_create(top_card);
     lv_obj_set_style_text_font(t_kmh, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_kmh, COLOR_LV_SILVER, 0);
-    lv_obj_set_pos(t_kmh, 116, 14);
+    lv_obj_set_pos(t_kmh, 118, 14);
     lv_label_set_text(t_kmh, "KM/H");
 
     lbl_trip_fix = lv_label_create(top_card);
     lv_obj_set_style_text_font(lbl_trip_fix, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_trip_fix, COLOR_LV_MID_GRAY, 0);
-    lv_obj_set_pos(lbl_trip_fix, 116, 36);
+    lv_obj_set_pos(lbl_trip_fix, 118, 36);
     lv_label_set_text(lbl_trip_fix, "NO FIX");
 
+    // Тонкий вертикальный разделитель между спидометром и расходомером
+    createDivider(top_card, 160, 10, 1, 46);
+
+    // Правая зона: Мгновенный расход топлива
     lbl_trip_inst = lv_label_create(top_card);
     lv_obj_set_style_text_font(lbl_trip_inst, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_trip_inst, COLOR_LV_WHITE, 0);
@@ -350,19 +355,19 @@ void UiEngine::createScreenTrip() {
     lv_label_set_text(lbl_trip_inst, "0.0 L/H");
 
     // 3 Спортивные плитки снизу (симметрично экрану часов: 94 x 128 px)
-    // Плитка 1: TRIP DISTANCE (слева)
+    // Плитка 1: TRIP DISTANCE (слева) - единица (KM) в заголовке, число строго по центру
     card_trip_dist = createCardTile(scr_trip, 10, 104, 94, 128);
     lv_obj_t* t_dist = lv_label_create(card_trip_dist);
     lv_obj_set_style_text_font(t_dist, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(t_dist, COLOR_LV_SILVER, 0);
     lv_obj_align(t_dist, LV_ALIGN_TOP_MID, 0, 4);
-    lv_label_set_text(t_dist, "TRIP DIST");
+    lv_label_set_text(t_dist, "TRIP (KM)");
 
     lbl_trip_dist = lv_label_create(card_trip_dist);
     lv_obj_set_style_text_font(lbl_trip_dist, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_trip_dist, COLOR_LV_WHITE, 0);
     lv_obj_align(lbl_trip_dist, LV_ALIGN_CENTER, 0, 0);
-    lv_label_set_text(lbl_trip_dist, "0.0 km");
+    lv_label_set_text(lbl_trip_dist, "0.0");
 
     lbl_trip_reset_hint = lv_label_create(card_trip_dist);
     lv_obj_set_style_text_font(lbl_trip_reset_hint, &lv_font_montserrat_12, 0);
@@ -382,13 +387,13 @@ void UiEngine::createScreenTrip() {
     lv_obj_set_style_text_font(lbl_trip_avg, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_trip_avg, COLOR_LV_WHITE, 0);
     lv_obj_align(lbl_trip_avg, LV_ALIGN_CENTER, 0, 0);
-    lv_label_set_text(lbl_trip_avg, "--- L");
+    lv_label_set_text(lbl_trip_avg, "---");
 
     lv_obj_t* sub_avg = lv_label_create(card_trip_avg);
     lv_obj_set_style_text_font(sub_avg, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(sub_avg, COLOR_LV_MID_GRAY, 0);
     lv_obj_align(sub_avg, LV_ALIGN_BOTTOM_MID, 0, -4);
-    lv_label_set_text(sub_avg, "L/100KM");
+    lv_label_set_text(sub_avg, "L / 100KM");
 
     // Плитка 3: TRIP FUEL (справа)
     card_trip_fuel = createCardTile(scr_trip, 216, 104, 94, 128);
@@ -402,7 +407,7 @@ void UiEngine::createScreenTrip() {
     lv_obj_set_style_text_font(lbl_trip_fuel, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(lbl_trip_fuel, COLOR_LV_WHITE, 0);
     lv_obj_align(lbl_trip_fuel, LV_ALIGN_CENTER, 0, 0);
-    lv_label_set_text(lbl_trip_fuel, "0.0 L");
+    lv_label_set_text(lbl_trip_fuel, "0.0");
 
     lv_obj_t* sub_fuel = lv_label_create(card_trip_fuel);
     lv_obj_set_style_text_font(sub_fuel, &lv_font_montserrat_12, 0);
@@ -552,7 +557,7 @@ void UiEngine::createScreenMPerf() {
     lv_obj_t* t_rpm = lv_label_create(c_tacho);
     lv_obj_set_style_text_font(t_rpm, &lv_font_telemetry_24, 0);
     lv_obj_set_style_text_color(t_rpm, COLOR_LV_SILVER, 0);
-    lv_obj_set_pos(t_rpm, 180, 28);
+    lv_obj_set_pos(t_rpm, 186, 28);
     lv_label_set_text(t_rpm, "RPM");
 
     // Прогрессивная полоса тахометра
@@ -880,13 +885,13 @@ void UiEngine::updateTripScreen() {
     // Статус MegaSquirt 2 в верхнем левом углу
     updateMs2StatusWidget(lbl_ms2_status_2, sens.ms2Online);
 
-    // Скорость по GPS
+    // Скорость по GPS (число без паразитных пробелов)
     static int lastSpd = -999;
     int spd = (int)trip.current_speed_kmh;
     if (spd > 999) spd = 999;
     if (spd != lastSpd) {
         lastSpd = spd;
-        lv_label_set_text_fmt(lbl_trip_spd, "%3d", spd);
+        lv_label_set_text_fmt(lbl_trip_spd, "%d", spd);
     }
 
     // Статус фиксации GPS и спутники
@@ -910,24 +915,28 @@ void UiEngine::updateTripScreen() {
         }
     }
 
-    // Мгновенный расход
+    // Мгновенный расход (компактный и читаемый формат: L/H на месте или L/100 в движении)
     static float lastInst = -999.0f;
     static bool lastIsLph = false;
     if (fabs(trip.instant_consumption - lastInst) >= 0.1f || trip.isLitersPerHour != lastIsLph) {
         lastInst = trip.instant_consumption;
         lastIsLph = trip.isLitersPerHour;
         char instBuf[32];
-        snprintf(instBuf, sizeof(instBuf), "%.1f %s", trip.instant_consumption, trip.isLitersPerHour ? "L/H" : "L");
+        snprintf(instBuf, sizeof(instBuf), "%.1f %s", trip.instant_consumption, trip.isLitersPerHour ? "L/H" : "L/100");
         lv_label_set_text(lbl_trip_inst, instBuf);
     }
 
-    // 3 Спортивные плитки
+    // 3 Спортивные плитки: числа выводятся строго без паразитных суффиксов, единицы в подписях
     static float lastDist = -999.0f;
     static float lastAvg = -999.0f;
     static float lastFuel = -999.0f;
     if (fabs(trip.trip_distance_km - lastDist) >= 0.1f) {
         lastDist = trip.trip_distance_km;
-        lv_label_set_text_fmt(lbl_trip_dist, "%.1f km", trip.trip_distance_km);
+        if (trip.trip_distance_km >= 1000.0f) {
+            lv_label_set_text_fmt(lbl_trip_dist, "%.0f", trip.trip_distance_km);
+        } else {
+            lv_label_set_text_fmt(lbl_trip_dist, "%.1f", trip.trip_distance_km);
+        }
     }
     if (fabs(trip.avg_consumption_l_100km - lastAvg) >= 0.1f) {
         lastAvg = trip.avg_consumption_l_100km;
@@ -939,7 +948,7 @@ void UiEngine::updateTripScreen() {
     }
     if (fabs((float)trip.trip_fuel_liters - lastFuel) >= 0.1f) {
         lastFuel = (float)trip.trip_fuel_liters;
-        lv_label_set_text_fmt(lbl_trip_fuel, "%.1f L", trip.trip_fuel_liters);
+        lv_label_set_text_fmt(lbl_trip_fuel, "%.1f", trip.trip_fuel_liters);
     }
 
     // Автоматический возврат подсказки [HOLD RST] через 2.5 сек после сброса
@@ -1175,15 +1184,15 @@ void UiEngine::updateSettingsScreen() {
     if (sens.ms2Online != lastCanOnline || pkts != lastCanPkts) {
         lastCanOnline = sens.ms2Online;
         lastCanPkts = pkts;
-        lv_label_set_text_fmt(lbl_set_can, "CAN-BUS: 500 kbps (%s, %lu pkts)",
+        lv_label_set_text_fmt(lbl_set_can, "CAN: 500k (%s | %lu pkts)",
                               sens.ms2Online ? "ONLINE" : "OFFLINE", pkts);
     }
 
     if (gps.hasFix != lastGpsFix || gps.satellites != lastGpsSats) {
         lastGpsFix = gps.hasFix;
         lastGpsSats = gps.satellites;
-        lv_label_set_text_fmt(lbl_set_gps, LV_SYMBOL_GPS " GPS: NEO-7M (%s, %d SATS)",
-                              gps.hasFix ? "3D FIX" : "SEARCHING", gps.satellites);
+        lv_label_set_text_fmt(lbl_set_gps, LV_SYMBOL_GPS " GPS: NEO-7M (%s | %d SATS)",
+                              gps.hasFix ? "3D FIX" : "SEARCH", gps.satellites);
     }
 }
 
@@ -1227,8 +1236,8 @@ void UiEngine::createScreenGauge() {
 
     // Внизу слева: Пиковое значение за поездку (BMW Amber / Янтарный)
     lbl_digital_peak = lv_label_create(card_digital_gauge);
-    lv_obj_set_size(lbl_digital_peak, 140, 20);
-    lv_obj_set_pos(lbl_digital_peak, 8, 168);
+    lv_obj_set_size(lbl_digital_peak, 134, 20);
+    lv_obj_set_pos(lbl_digital_peak, 10, 168);
     lv_obj_set_style_text_font(lbl_digital_peak, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_digital_peak, lv_color_make(255, 170, 0), 0);
     lv_obj_set_style_text_align(lbl_digital_peak, LV_TEXT_ALIGN_LEFT, 0);
@@ -1237,8 +1246,8 @@ void UiEngine::createScreenGauge() {
 
     // Внизу справа: Сохраненные лимиты варнингов для данного прибора
     lbl_digital_warn_limit = lv_label_create(card_digital_gauge);
-    lv_obj_set_size(lbl_digital_warn_limit, 140, 20);
-    lv_obj_set_pos(lbl_digital_warn_limit, 144, 168);
+    lv_obj_set_size(lbl_digital_warn_limit, 134, 20);
+    lv_obj_set_pos(lbl_digital_warn_limit, 156, 168);
     lv_obj_set_style_text_font(lbl_digital_warn_limit, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lbl_digital_warn_limit, COLOR_LV_SILVER, 0);
     lv_obj_set_style_text_align(lbl_digital_warn_limit, LV_TEXT_ALIGN_RIGHT, 0);
