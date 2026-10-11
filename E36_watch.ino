@@ -71,7 +71,13 @@ static const char* getResetReasonStr(esp_reset_reason_t r) {
 void setup() {
     Serial.begin(115200);
 #if ARDUINO_USB_CDC_ON_BOOT
-    Serial.setTxTimeoutMs(0); // Предотвращает зависание ESP32-S3, если монитор порта закрыт или плата работает автономно в авто
+    // ВАЖНО: В ESP32-S3 Core 3.x (HWCDC.cpp) при tx_timeout_ms = 0 происходит underflow
+    // переменной `uint32_t tries = tx_timeout_ms; tries--;` до 4 294 967 295, из-за чего
+    // вызов delay(1) зацикливается на 49 дней при закрытом мониторе порта!
+    // Установка таймаута в 10 мс позволяет HWCDC корректно зафиксировать timeout,
+    // сбросить connected = false и мгновенно сбрасывать данные без блокировки FreeRTOS.
+    Serial.setTxTimeoutMs(10);
+    Serial.setTxBufferSize(1024);
 #endif
     delay(200);
 
