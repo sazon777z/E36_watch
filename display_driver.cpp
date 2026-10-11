@@ -21,20 +21,19 @@ void DisplayDriver::setBrightness(uint8_t brightness) {
 }
 
 bool DisplayDriver::init() {
-    initBacklight();
+    // 1. Принудительно выключаем подсветку при старте (гарантирует отсутствие белого шума и вспышек)
+    pinMode(PIN_TFT_BL, OUTPUT);
+    digitalWrite(PIN_TFT_BL, LOW);
+    currentBrightness = 0;
 
-    // 1. Предварительно переводим все управляющие выводы SPI в пассивный уровень HIGH
-    // Это исключает ложные срабатывания интерфейса дисплея при сбросе платы кнопкой EN/RESET
+    // 2. Деактивируем Chip Select (CS = HIGH) и переводим DC в HIGH.
+    // Линию тактирования SPI (SCL) не переводим в HIGH, так как ST7789 работает в SPI Mode 0 (CPOL=0).
     pinMode(PIN_TFT_CS, OUTPUT);
-    digitalWrite(PIN_TFT_CS, HIGH); // CS деактивирован
+    digitalWrite(PIN_TFT_CS, HIGH);
     pinMode(PIN_TFT_DC, OUTPUT);
     digitalWrite(PIN_TFT_DC, HIGH);
-    pinMode(PIN_TFT_SCL, OUTPUT);
-    digitalWrite(PIN_TFT_SCL, HIGH);
-    pinMode(PIN_TFT_SDA, OUTPUT);
-    digitalWrite(PIN_TFT_SDA, HIGH);
 
-    // 2. Аппаратный импульс сброса контроллера ST7789
+    // 3. Надежный аппаратный импульс сброса контроллера ST7789
     pinMode(PIN_TFT_RST, OUTPUT);
     digitalWrite(PIN_TFT_RST, HIGH);
     delay(20);
@@ -43,33 +42,31 @@ bool DisplayDriver::init() {
     digitalWrite(PIN_TFT_RST, HIGH);
     delay(150);
 
-    // 3. Инициализация аппаратного SPI на кастомных пинах ESP32-S3
+    // 4. Инициализация аппаратного SPI на кастомных пинах ESP32-S3
+    // Передаем SS = -1, так как библиотека Adafruit_SPITFT управляет пином CS (GPIO 9) вручную.
+    // Это исключает захват пина аппаратным модулем SPI и устраняет черный экран при аппаратном сбросе.
     if (!spi) {
         spi = new SPIClass(FSPI);
-        spi->begin(PIN_TFT_SCL, -1, PIN_TFT_SDA, PIN_TFT_CS);
+        spi->begin(PIN_TFT_SCL, -1, PIN_TFT_SDA, -1);
     }
 
     if (!tft) {
-        tft = new Adafruit_ST7789(spi, PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST);
+        // Передаем RST = -1, так как аппаратный сброс мы уже выполнили выше с точными таймингами
+        tft = new Adafruit_ST7789(spi, PIN_TFT_CS, PIN_TFT_DC, -1);
     }
 
-    // 4. Инициализация ST7789 для дисплея 240x320
+    // 5. Стандартная инициализация ST7789 для дисплея 240x320
     tft->init(240, 320);
     tft->setSPISpeed(20000000); // 20 MHz SPI - стабильная скорость без помех
     tft->setRotation(DISPLAY_ROTATION);
 
-    // 5. Пауза 120 мс для встроенных генераторов напряжений (charge pumps) Sitronix ST7789
-    // Библиотека tft->init() уже отправляет SLPOUT (0x11), поэтому повторно слать SLPOUT не нужно,
-    // но критически важно выдержать паузу 120 мс перед включением развертки матрицы
-    delay(120);
-    tft->sendCommand(ST77XX_NORON);  // Обычный режим отображения
-    tft->sendCommand(ST77XX_DISPON); // Включение вывода изображения
-    delay(50);
-
+    // 6. Первичная заливка черным цветом до включения подсветки матрицы
     tft->fillScreen(COLOR_BLACK);
 
     isInitialized = true;
-    setBrightness(255);
+
+    // 7. Включаем подсветку только ПОСЛЕ того, как матрица полностью проинициализирована и заполнена черным
+    initBacklight();
     return true;
 }
 

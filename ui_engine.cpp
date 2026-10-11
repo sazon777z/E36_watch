@@ -105,7 +105,7 @@ void UiEngine::dispFlushCb(lv_disp_drv_t* disp_drv, const lv_area_t* area, lv_co
     tft.startWrite();
     tft.setAddrWindow(area->x1, area->y1, w, h);
     // bigEndian = true, так как в lv_conf.h активирован LV_COLOR_16_SWAP 1
-    tft.writePixels((uint16_t*)&color_p->full, w * h, true, true);
+    tft.writePixels((uint16_t*)color_p, w * h, true, true);
     delayMicroseconds(2); // Гарантирует завершение передачи последнего байта до подъема CS
     tft.endWrite();
 
