@@ -715,6 +715,14 @@ void UiEngine::update() {
     lv_tick_inc(now - lastTickMillis);
     lastTickMillis = now;
 
+    // Гарантированная принудительная перерисовка первых 5 кадров после старта loop()
+    // Это исключает пропуск первой отрисовки интерфейса при аппаратном сбросе платы
+    static uint8_t initialForceRefresh = 5;
+    if (initialForceRefresh > 0) {
+        initialForceRefresh--;
+        lv_obj_invalidate(lv_scr_act());
+    }
+
     // Мигание двоеточия раз в секунду
     if (now - lastColonBlinkMillis >= 500) {
         colonState = !colonState;

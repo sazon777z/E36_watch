@@ -60,6 +60,15 @@ bool DisplayDriver::init() {
     tft->setSPISpeed(20000000); // 20 MHz SPI - стабильная скорость без помех
     tft->setRotation(DISPLAY_ROTATION);
 
+    // Пауза 120 мс для встроенных генераторов напряжений (charge pumps) Sitronix ST7789.
+    // Библиотека tft->init() шлет SLPOUT (0x11) с задержкой всего 10 мс, тогда как согласно
+    // спецификации Sitronix, аналоговым накачкам требуется 120 мс до активации развертки (DISPON).
+    delay(120);
+    tft->sendCommand(ST77XX_NORON);
+    delay(10);
+    tft->sendCommand(ST77XX_DISPON);
+    delay(50);
+
     // 6. Первичная заливка черным цветом до включения подсветки матрицы
     tft->fillScreen(COLOR_BLACK);
 
