@@ -1,11 +1,14 @@
-const CACHE_NAME = 'bmw-e36-obc-v2';
+const CACHE_NAME = 'bmw-e36-obc-v3';
 const ASSETS = [
   './',
   './index.html',
   './ble_app.html',
   './manifest.json',
+  './manifest.json?v=3',
   './icon-192.png',
-  './icon-512.png'
+  './icon-192.png?v=3',
+  './icon-512.png',
+  './icon-512.png?v=3'
 ];
 
 self.addEventListener('install', (event) => {
@@ -46,7 +49,7 @@ self.addEventListener('fetch', (event) => {
         return networkResponse;
       })
       .catch(() => {
-        return caches.match(event.request).then((cachedResponse) => {
+        return caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
           if (cachedResponse) return cachedResponse;
           if (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html')) {
             return caches.match('./index.html');
