@@ -289,7 +289,7 @@ void UiEngine::createTopLayer() {
     ms2Text.obj = makeLabel(top, &lv_font_montserrat_12, C_DIM, "MS2");
     lv_obj_set_pos(ms2Text.obj, 25, 5);
 
-    titleLbl.obj = makeLabel(top, &lv_font_montserrat_12, C_TEXT, "");
+    titleLbl.obj = makeLabel(top, &lv_font_cyr_12, C_TEXT, "");
     lv_obj_set_style_text_letter_space(titleLbl.obj, 2, 0);
     lv_obj_align(titleLbl.obj, LV_ALIGN_TOP_MID, 0, 5);
 
@@ -636,7 +636,13 @@ void UiEngine::updateTopLayer() {
     const char* title = "";
     char buf[32];
     switch (currentScreen) {
-        case ScreenId::CLASSIC_CLOCK:  title = Time.getTime().dayOfWeekStrEn; break;
+        case ScreenId::CLASSIC_CLOCK: {
+            static const char* daysRu[7] = { "ВОСКРЕСЕНЬЕ", "ПОНЕДЕЛЬНИК", "ВТОРНИК", "СРЕДА",
+                                             "ЧЕТВЕРГ", "ПЯТНИЦА", "СУББОТА" };
+            int dow = Time.getTime().dayOfWeek;
+            title = (dow >= 0 && dow <= 6) ? daysRu[dow] : "";
+            break;
+        }
         case ScreenId::OBC_TRIP_FUEL:  title = "TRIP"; break;
         case ScreenId::OBC_TELEMETRY:  title = "ENGINE"; break;
         case ScreenId::M_PERFORMANCE:  title = "///M"; break;

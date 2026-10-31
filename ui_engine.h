@@ -15,6 +15,7 @@
 extern "C" {
     extern const lv_font_t lv_font_clock_70;
     extern const lv_font_t lv_font_telemetry_24;
+    extern const lv_font_t lv_font_cyr_12;   // Кириллица 12 px, остальное - из Montserrat 12
 }
 
 enum class ScreenId {
