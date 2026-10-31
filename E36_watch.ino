@@ -40,6 +40,7 @@
 #include "warning_manager.h"
 #include "ui_engine.h"
 #include "ble_manager.h"
+#include "power_manager.h"
 
 #include <esp_system.h>
 
@@ -89,6 +90,9 @@ void setup() {
 
     Serial.println("[BMW E36 OBC] Инициализация системы...");
 
+    // 0. Причина пробуждения и освобождение пинов пробуждения (до инициализации CAN)
+    Power.init();
+
     // 1. Инициализация дисплея ST7789 и аппаратного SPI
     if (!Display.init()) {
         Serial.println("[ERROR] Ошибка инициализации дисплея ST7789!");
@@ -106,10 +110,13 @@ void setup() {
     // 3. Инициализация GPS-модуля NEO-7M (UART1 на GPIO 44/43)
     Gps.init();
 
-    // 4. Отображение заставки с причиной загрузки (RST reason)
-    char splashMsg[64];
-    snprintf(splashMsg, sizeof(splashMsg), "RST: %s", rstStr);
-    UI.showBootSplash(splashMsg);
+    // 4. Отображение заставки с причиной загрузки (RST reason).
+    // При пробуждении по зажиганию заставку пропускаем, чтобы приборы появились быстрее.
+    if (!Power.wokeFromSleep()) {
+        char splashMsg[64];
+        snprintf(splashMsg, sizeof(splashMsg), "RST: %s", rstStr);
+        UI.showBootSplash(splashMsg);
+    }
 
     // 5. Инициализация часов, сенсоров, одометра/расхода, варнингов, UI и Bluetooth LE
     Time.init();
@@ -125,7 +132,11 @@ void setup() {
     Serial.println("[OK] Система готова к работе.");
     Serial.printf("[MEM] Free Heap: %u bytes, Free PSRAM: %u bytes\n", 
                   (unsigned int)ESP.getFreeHeap(), (unsigned int)ESP.getFreePsram());
-    Serial.println("[OK] UI v2.5: Цифровой прибор (пик и лимит в нижних углах карточки).");
+    Serial.printf("[OK] Прошивка v%s\n", FW_VERSION);
+
+    // Сторожевой таймер основного цикла: если loop() зависнет дольше
+    // CONFIG_ESP_TASK_WDT_TIMEOUT_S (5 с), плата перезагрузится сама (причина TASK WDT).
+    enableLoopWDT();
 }
 
 void loop() {
@@ -187,6 +198,14 @@ void loop() {
             Serial.println("[TEST] Тест завершен, LVGL экран перерисован.");
         } else if (c == 'b' || c == 'B') {
             Serial.println("[CMD] Подсветка зафиксирована на 100% (максимум)");
+        } else if (c == 'p' || c == 'P') {
+            const GpsData& g = Gps.getData();
+            Serial.printf("[GPS] fix=%d sats=%u hdop=%.1f raw=%.1f km/h -> %.1f km/h (moving=%d) | trip=%.3f km\n",
+                          g.hasFix ? 1 : 0, g.satellites, g.hdop, g.rawSpeed_kmh, g.speed_kmh,
+                          g.moving ? 1 : 0, Trip.getData().trip_distance_km);
+        } else if (c == 's' || c == 'S') {
+            Serial.println("[CMD] 's' -> Принудительный переход в глубокий сон");
+            Power.enterDeepSleep();
         } else if (c == 'q' || c == 'Q') {
             Serial.println("[CMD] Перезагрузка ESP32 (ESP.restart)...");
             delay(100);
@@ -200,6 +219,9 @@ void loop() {
 
     // 7. Обработка нажатий физической кнопки (одиночный, двойной клик, удержание)
     ButtonAction btnAct = Sensors.getButtonAction();
+    if (btnAct != ButtonAction::NONE) {
+        Power.notifyActivity();
+    }
     if (btnAct == ButtonAction::CLICK) {
         Serial.println("[BTN] Одиночный клик -> следующий экран");
         UI.nextScreen();
@@ -230,6 +252,9 @@ void loop() {
         lastUiUpdate = currentMillis;
         UI.update();
     }
+
+    // 7. Глубокий сон при выключенном зажигании (тишина на CAN-шине)
+    Power.update();
 
     // Небольшая уступка квантов времени для FreeRTOS и BLE стека ESP32
     yield();

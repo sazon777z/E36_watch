@@ -33,15 +33,17 @@ public:
     const WarningSettings& getSettings() const { return settings; }
     const WarningState& getState() const { return state; }
 
-    // Установка параметров
-    void setEnabled(bool en);
-    void setBoostMax(float bar);
-    void setCltMax(float degC);
-    void setAfrLimits(float richMin, float leanMax);
+    // Установка параметров. Возвращают false, если значение вне допустимого диапазона.
+    // save = false - только изменить в памяти, записать во Flash позже через commit().
+    void setEnabled(bool en, bool save = true);
+    bool setBoostMax(float bar, bool save = true);
+    bool setCltMax(float degC, bool save = true);
+    bool setAfrLimits(float richMin, float leanMax, bool save = true);
 
     // Сохранение и загрузка из NVS Flash
     void loadFromNvs();
     void saveToNvs();
+    void commit() { if (dirtySettings) saveToNvs(); } // Запись, только если что-то изменилось
 
     // Генерация строки настроек в формате JSON для мобильного приложения
     String getSettingsJson() const;

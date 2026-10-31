@@ -24,6 +24,9 @@ public:
     // Доступ к объекту Adafruit_ST7789
     Adafruit_ST7789& getTft() { return *tft; }
 
+    // Перевод матрицы в SLPIN и фиксация подсветки выключенной на время глубокого сна
+    void sleep();
+
     // Очистка экрана
     void clear(uint16_t color = COLOR_BLACK);
 

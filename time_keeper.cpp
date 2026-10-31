@@ -4,6 +4,12 @@
 
 TimeKeeper Time;
 
+// RTC-память переживает глубокий сон и программный сброс (но не отключение питания).
+// Системное время ESP32 в это время продолжает идти от RTC таймера.
+RTC_DATA_ATTR static uint32_t rtcTimeMagic = 0;
+RTC_DATA_ATTR static bool rtcTimeSynced = false;
+static const uint32_t RTC_TIME_MAGIC = 0xE36C10C4;
+
 const char* TimeKeeper::daysRu[7] = { "ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ" };
 const char* TimeKeeper::daysEn[7] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
 
@@ -15,6 +21,13 @@ TimeKeeper::TimeKeeper() : timeSynced(false), timezoneOffset(DEFAULT_TIMEZONE_OF
 
 void TimeKeeper::init() {
     loadTimezoneFromNvs();
+    if (rtcTimeMagic == RTC_TIME_MAGIC) {
+        // Время сохранилось после сна - не сбрасываем
+        timeSynced = rtcTimeSynced;
+        update();
+        Serial.printf("[TIME] Время сохранено после сна: %s %s\n", currentTime.timeStr, currentTime.dateStr);
+        return;
+    }
     // Начальное время по умолчанию (если нет синхронизации)
     setManualTime(2026, 8, 30, 12, 0, 0, false);
     update();
@@ -62,6 +75,9 @@ void TimeKeeper::update() {
     struct tm timeinfo;
     time(&now);
     localtime_r(&now, &timeinfo);
+
+    rtcTimeMagic = RTC_TIME_MAGIC;
+    rtcTimeSynced = timeSynced;
 
     currentTime.hour = timeinfo.tm_hour;
     currentTime.minute = timeinfo.tm_min;

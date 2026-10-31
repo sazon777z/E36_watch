@@ -730,15 +730,7 @@
 
         <!-- Управление дисплеем -->
         <div class="card">
-            <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic;">
-                <span>ЯРКОСТЬ ПОДСВЕТКИ:</span>
-                <span id="lblBright">220</span>
-            </div>
-            <div class="range-wrapper">
-                <input type="range" id="rngBright" min="10" max="255" value="220" oninput="onBrightChange(this.value)">
-            </div>
-
-            <div style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic; margin-top: 16px;">ПЕРЕКЛЮЧИТЬ ЭКРАН:</div>
+            <div style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic;">ПЕРЕКЛЮЧИТЬ ЭКРАН:</div>
             <div class="btn-group-screens" style="grid-template-columns: repeat(6, 1fr);">
                 <button class="btn-screen" onclick="sendCmd('screen 1')">ЧАСЫ</button>
                 <button class="btn-screen" onclick="sendCmd('screen 2')">ТРИП</button>
@@ -763,6 +755,21 @@
             </div>
         </div>
         </div> <!-- Конец digitalSection -->
+
+        <!-- Обновление прошивки по BLE -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span style="font-size: 12px; color: var(--text-silver); font-weight: 700; font-style: italic;">ОБНОВЛЕНИЕ ПРОШИВКИ (BLE OTA):</span>
+                <span id="otaVer" style="font-size: 11px; color: #888;">v ---</span>
+            </div>
+            <input type="file" id="otaFile" accept=".bin" style="width: 100%; color: #aaa; font-size: 12px;">
+            <input type="password" id="otaPin" placeholder="PIN обновления" class="input-warn" style="margin-top: 8px;">
+            <div style="margin-top: 10px; height: 8px; background: #222; border-radius: 4px; overflow: hidden;">
+                <div id="otaBar" style="height: 100%; width: 0%; background: var(--m-blue, #0066b1); transition: width 0.2s;"></div>
+            </div>
+            <div id="otaStatus" style="margin-top: 6px; font-size: 11px; color: #888;">Выберите файл .bin (Скетч → Экспорт бинарного файла)</div>
+            <button class="btn btn-primary" id="otaBtn" style="margin-top: 10px; padding: 12px;" onclick="startOta()">⬆ Залить прошивку</button>
+        </div>
 
         <!-- Консоль логов -->
         <div class="log-box" id="logBox">Готов к подключению через Web Bluetooth (Chrome / Edge)...</div>
@@ -1285,7 +1292,7 @@
                 log('Поиск устройства BMW-E36-OBC...');
                 bleDevice = await navigator.bluetooth.requestDevice({
                     filters: [{ name: 'BMW-E36-OBC' }],
-                    optionalServices: [NUS_SERVICE_UUID]
+                    optionalServices: [NUS_SERVICE_UUID, OTA_SERVICE_UUID]
                 });
 
                 bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
@@ -1300,6 +1307,20 @@
 
                 await txChar.startNotifications();
                 txChar.addEventListener('characteristicvaluechanged', onNotify);
+
+                // Сервис OTA (может отсутствовать на старых прошивках)
+                otaCtrlChar = null;
+                otaDataChar = null;
+                try {
+                    const otaService = await server.getPrimaryService(OTA_SERVICE_UUID);
+                    otaCtrlChar = await otaService.getCharacteristic(OTA_CTRL_UUID);
+                    otaDataChar = await otaService.getCharacteristic(OTA_DATA_UUID);
+                    await otaCtrlChar.startNotifications();
+                    otaCtrlChar.addEventListener('characteristicvaluechanged', onOtaNotify);
+                    setTimeout(() => otaCtrl('ver'), 700);
+                } catch (e) {
+                    document.getElementById('otaVer').textContent = 'OTA не поддерживается';
+                }
 
                 setConnectedUI(true);
                 log('Подключено к BMW E36!');
@@ -1317,6 +1338,138 @@
         function onDisconnected() {
             log('Связь разорвана.');
             setConnectedUI(false);
+            otaCtrlChar = null;
+            otaDataChar = null;
+            if (otaWaiter) otaWaiter.reject(new Error('связь разорвана'));
+        }
+
+        // -------------------------------------------------------------
+        // ОБНОВЛЕНИЕ ПРОШИВКИ ПО BLE (OTA)
+        // -------------------------------------------------------------
+        const OTA_SERVICE_UUID = 'c0de0001-e36b-4d57-a0b1-0b1e0a7a0001';
+        const OTA_CTRL_UUID    = 'c0de0002-e36b-4d57-a0b1-0b1e0a7a0001';
+        const OTA_DATA_UUID    = 'c0de0003-e36b-4d57-a0b1-0b1e0a7a0001';
+        const OTA_CHUNK = 500;
+
+        let otaCtrlChar = null;
+        let otaDataChar = null;
+        let otaWaiter = null;   // { prefix, resolve, reject } - ожидание ответа OK/ERR
+        let otaBusy = false;
+        let otaTotal = 0;
+
+        function crc32(bytes) {
+            let table = crc32.table;
+            if (!table) {
+                table = crc32.table = new Uint32Array(256);
+                for (let i = 0; i < 256; i++) {
+                    let c = i;
+                    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+                    table[i] = c >>> 0;
+                }
+            }
+            let crc = 0xFFFFFFFF;
+            for (let i = 0; i < bytes.length; i++) crc = table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+            return (crc ^ 0xFFFFFFFF) >>> 0;
+        }
+
+        function setOtaStatus(text, pct) {
+            document.getElementById('otaStatus').textContent = text;
+            if (pct !== undefined) document.getElementById('otaBar').style.width = pct + '%';
+        }
+
+        async function otaCtrl(cmd) {
+            await otaCtrlChar.writeValueWithResponse(new TextEncoder().encode(cmd));
+        }
+
+        // Отправляет команду и ждет ответа, начинающегося с okPrefix (или ERR)
+        function otaRequest(cmd, okPrefix, timeoutMs) {
+            return new Promise((resolve, reject) => {
+                const timer = setTimeout(() => {
+                    otaWaiter = null;
+                    reject(new Error('нет ответа на "' + cmd.split(' ')[0] + '"'));
+                }, timeoutMs);
+                otaWaiter = {
+                    prefix: okPrefix,
+                    resolve: (v) => { clearTimeout(timer); otaWaiter = null; resolve(v); },
+                    reject: (e) => { clearTimeout(timer); otaWaiter = null; reject(e); }
+                };
+                otaCtrl(cmd).catch(e => otaWaiter && otaWaiter.reject(e));
+            });
+        }
+
+        function onOtaNotify(event) {
+            const text = new TextDecoder().decode(event.target.value).trim();
+            if (text.startsWith('VER ')) {
+                document.getElementById('otaVer').textContent = 'v' + text.substring(4);
+                return;
+            }
+            if (text.startsWith('PROG ')) {
+                return; // прогресс считается на стороне приложения
+            }
+            if (otaWaiter) {
+                if (text.startsWith(otaWaiter.prefix)) otaWaiter.resolve(text);
+                else if (text.startsWith('ERR')) otaWaiter.reject(new Error(text));
+            } else if (text.startsWith('ERR')) {
+                log('OTA: ' + text);
+            }
+        }
+
+        async function startOta() {
+            if (otaBusy) return;
+            if (!otaCtrlChar || !otaDataChar) {
+                setOtaStatus('Сначала подключитесь к устройству (нужна прошивка с поддержкой OTA).');
+                return;
+            }
+            const file = document.getElementById('otaFile').files[0];
+            const pin = document.getElementById('otaPin').value.trim();
+            if (!file) { setOtaStatus('Выберите файл прошивки .bin'); return; }
+            if (!pin) { setOtaStatus('Введите PIN обновления'); return; }
+
+            const data = new Uint8Array(await file.arrayBuffer());
+            if (data.length < 1024 || data[0] !== 0xE9) {
+                setOtaStatus('Это не файл прошивки ESP32 (ожидается .bin из Arduino IDE, не .merged/.bootloader).');
+                return;
+            }
+            if (!confirm(`Залить прошивку ${file.name} (${(data.length / 1024).toFixed(0)} КБ)?\nНе отключайте питание и не уходите со страницы.`)) return;
+
+            otaBusy = true;
+            otaTotal = data.length;
+            document.getElementById('otaBtn').disabled = true;
+            const crc = crc32(data);
+            const t0 = Date.now();
+
+            try {
+                setOtaStatus('Подготовка...', 0);
+                await otaRequest(`begin ${data.length} ${crc.toString(16)} ${pin}`, 'OK BEGIN', 10000);
+                log('OTA: начата загрузка ' + file.name);
+
+                let lastUi = 0;
+                for (let off = 0; off < data.length; off += OTA_CHUNK) {
+                    if (!otaDataChar) throw new Error('связь разорвана');
+                    await otaDataChar.writeValueWithResponse(data.subarray(off, Math.min(off + OTA_CHUNK, data.length)));
+                    const now = Date.now();
+                    if (now - lastUi > 250) {
+                        lastUi = now;
+                        const sent = Math.min(off + OTA_CHUNK, data.length);
+                        const kbps = sent / 1024 / ((now - t0) / 1000);
+                        setOtaStatus(`Передача: ${(sent / 1024).toFixed(0)} / ${(data.length / 1024).toFixed(0)} КБ (${kbps.toFixed(1)} КБ/с)`,
+                                     (sent * 100 / data.length).toFixed(1));
+                    }
+                }
+
+                setOtaStatus('Проверка прошивки на устройстве...', 100);
+                await otaRequest('end', 'OK DONE', 20000);
+                const sec = ((Date.now() - t0) / 1000).toFixed(0);
+                setOtaStatus(`Готово за ${sec} с. Устройство перезагружается — подключитесь заново через ~10 с.`, 100);
+                log('OTA: прошивка успешно загружена, перезагрузка.');
+            } catch (err) {
+                setOtaStatus('Ошибка: ' + err.message);
+                log('OTA ошибка: ' + err.message);
+                if (otaCtrlChar) otaCtrl('abort').catch(() => {});
+            } finally {
+                otaBusy = false;
+                document.getElementById('otaBtn').disabled = false;
+            }
         }
 
         function setConnectedUI(connected) {
@@ -1346,13 +1499,33 @@
             }
         }
 
-        function onNotify(event) {
-            const dec = new TextDecoder();
-            const text = dec.decode(event.target.value).trim();
+        // Длинные сообщения приходят несколькими уведомлениями (по размеру MTU),
+        // склеиваем их до символа перевода строки
+        let rxBuffer = '';
+        const rxDecoder = new TextDecoder();
 
+        function onNotify(event) {
+            rxBuffer += rxDecoder.decode(event.target.value, { stream: true });
+            if (rxBuffer.length > 4096) rxBuffer = ''; // защита от мусора без перевода строки
+            let nl;
+            while ((nl = rxBuffer.indexOf('\n')) >= 0) {
+                const line = rxBuffer.substring(0, nl).trim();
+                rxBuffer = rxBuffer.substring(nl + 1);
+                if (line.length > 0) handleLine(line);
+            }
+        }
+
+        function handleLine(text) {
             if (text.startsWith('{') && text.endsWith('}')) {
                 try {
                     const data = JSON.parse(text);
+                    // Нет связи с ЭБУ: показываем прочерки вместо значений мотора
+                    if (data.ms2 === 0) {
+                        ['valRpm', 'valBoost', 'valClt', 'valAfr', 'valVolt'].forEach(id => {
+                            const el = document.getElementById(id); if (el) el.textContent = '---';
+                        });
+                        delete data.rpm; delete data.boost; delete data.clt; delete data.afr; delete data.volt;
+                    }
                     // Живая телеметрия
                     if (data.rpm !== undefined) {
                         const el = document.getElementById('valRpm');
@@ -1526,15 +1699,6 @@
             const epoch = Math.floor(now.getTime() / 1000);
             sendCmd(`epoch ${epoch}`);
             log(`Синхронизация времени: UTC${parseInt(tz) >= 0 ? '+' : ''}${tz}, epoch ${epoch}`);
-        }
-
-        let brightTimer = null;
-        function onBrightChange(val) {
-            document.getElementById('lblBright').textContent = val;
-            clearTimeout(brightTimer);
-            brightTimer = setTimeout(() => {
-                sendCmd(`bright ${val}`);
-            }, 100);
         }
 
         // Регистрация Service Worker для PWA (автономная работа, автообновление и оффлайн-кэш)

@@ -860,14 +860,14 @@ void UiEngine::updateClockScreen() {
         if (lastOnline || lastClt == -999) {
             lastOnline = false;
             lastBoost = 0.0f;
-            lastClt = (int)round(sens.tempOutdoor);
+            lastClt = -998; // Нет данных ЭБУ (не совпадает с маркером первого запуска -999)
             lastAfr = -1.0f;
 
-            lv_label_set_text(lbl_boost_val, "0.00");
+            lv_label_set_text(lbl_boost_val, "-.--");
             lv_obj_set_style_text_color(lbl_boost_sub, COLOR_LV_MID_GRAY, 0);
             lv_label_set_text(lbl_boost_sub, "bar");
 
-            lv_label_set_text_fmt(lbl_clt_val, "%d", lastClt);
+            lv_label_set_text(lbl_clt_val, "--");
             lv_obj_set_style_text_color(lbl_clt_sub, COLOR_LV_MID_GRAY, 0);
             lv_label_set_text(lbl_clt_sub, "\xC2\xB0 C");
 
@@ -1001,8 +1001,18 @@ void UiEngine::updateTelemScreen() {
         lastVolt = sens.batteryVoltage;
         lastVoltSt = sens.voltStatus;
         lastCrank = sens.minCrankVoltage;
-        lv_label_set_text_fmt(lbl_telem_volt, "%.2fV", sens.batteryVoltage);
-        if (sens.voltStatus == VoltageStatus::VOLT_CRITICAL_LOW) {
+        if (sens.batteryVoltage < 1.0f) {
+            // Источник напряжения недоступен (MS2 offline, АЦП не подключен)
+            lv_label_set_text(lbl_telem_volt, "--.--V");
+            lv_obj_set_style_text_color(lbl_telem_volt_sub, COLOR_LV_SILVER, 0);
+            lv_label_set_text(lbl_telem_volt_sub, "NO DATA");
+        } else {
+            lv_label_set_text_fmt(lbl_telem_volt, "%.2fV", sens.batteryVoltage);
+        }
+
+        if (sens.batteryVoltage < 1.0f) {
+            // Подпись уже выставлена выше
+        } else if (sens.voltStatus == VoltageStatus::VOLT_CRITICAL_LOW) {
             lv_obj_set_style_text_color(lbl_telem_volt_sub, COLOR_LV_M_RED, 0);
             lv_label_set_text(lbl_telem_volt_sub, "LOW BATTERY!");
         } else if (sens.voltStatus == VoltageStatus::VOLT_NORMAL_RUNNING) {
@@ -1026,11 +1036,12 @@ void UiEngine::updateTelemScreen() {
             lv_label_set_text_fmt(lbl_telem_clt_sub, "INTAKE: %+.0f C", sens.ms2.mat_c);
         }
     } else {
-        if (lastMs2Online || lastClt == -999.0f || fabs(sens.tempOutdoor - lastClt) >= 1.0f) {
-            lastClt = sens.tempOutdoor;
-            lastMat = sens.tempCabin;
-            lv_label_set_text_fmt(lbl_telem_clt, "%+.0f C", sens.tempOutdoor);
-            lv_label_set_text_fmt(lbl_telem_clt_sub, "INTAKE: %+.0f C", sens.tempCabin);
+        // Нет связи с ЭБУ - показываем прочерки вместо устаревших/условных значений
+        if (lastMs2Online || lastClt == -999.0f) {
+            lastClt = -998.0f;
+            lastMat = -998.0f;
+            lv_label_set_text(lbl_telem_clt, "-- C");
+            lv_label_set_text(lbl_telem_clt_sub, "INTAKE: -- C");
         }
     }
 
@@ -1356,8 +1367,11 @@ void UiEngine::updateGaugeScreen() {
             break;
         }
         case GaugeType::COOLANT: {
-            float clt = sens.ms2Online ? sens.ms2.clt_c : sens.tempOutdoor;
-            snprintf(valBuf, sizeof(valBuf), "%d", (int)round(clt));
+            if (sens.ms2Online) {
+                snprintf(valBuf, sizeof(valBuf), "%d", (int)round(sens.ms2.clt_c));
+            } else {
+                snprintf(valBuf, sizeof(valBuf), "--");
+            }
             snprintf(peakBuf, sizeof(peakBuf), "PK: %d\xC2\xB0 C", (int)round(peaks.max_clt_c));
             snprintf(limitBuf, sizeof(limitBuf), "LIM: >%d\xC2\xB0 C", (int)round(ws.clt_max_c));
             isAlarm = warn.cltAlarm;
@@ -1396,11 +1410,14 @@ void UiEngine::updateGaugeScreen() {
             break;
         }
         case GaugeType::INTAKE_TEMP: {
-            float mat = sens.ms2Online ? sens.ms2.mat_c : sens.tempCabin;
-            snprintf(valBuf, sizeof(valBuf), "%d", (int)round(mat));
+            if (sens.ms2Online) {
+                snprintf(valBuf, sizeof(valBuf), "%d", (int)round(sens.ms2.mat_c));
+            } else {
+                snprintf(valBuf, sizeof(valBuf), "--");
+            }
             snprintf(peakBuf, sizeof(peakBuf), "PK: %d\xC2\xB0 C", (int)round(peaks.max_iat_c));
             snprintf(limitBuf, sizeof(limitBuf), "LIM: >55\xC2\xB0 C");
-            isAlarm = (mat >= 55.0f);
+            isAlarm = sens.ms2Online && (sens.ms2.mat_c >= 55.0f);
             break;
         }
         case GaugeType::RPM: {

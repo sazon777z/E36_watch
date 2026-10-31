@@ -36,6 +36,7 @@ public:
 
     bool init();
     void update();
+    void shutdown(); // Остановка TWAI перед глубоким сном
 
     const Ms2Telemetry& getTelemetry() const { return telemetry; }
     bool isConnected() const { return telemetry.isOnline; }

@@ -35,10 +35,9 @@ void SensorsManager::init() {
 
 void SensorsManager::update() {
     // Получаем свежие данные CAN-шины
+    // Копируем всегда: при потере связи CanDriver сам обнуляет динамические параметры
     data.ms2Online = CanBus.isConnected();
-    if (data.ms2Online) {
-        data.ms2 = CanBus.getTelemetry();
-    }
+    data.ms2 = CanBus.getTelemetry();
 
     updateBatteryVoltage();
     updateTemperatures();
@@ -56,17 +55,20 @@ void SensorsManager::updateBatteryVoltage() {
         float pinVoltage = (filteredAdcRaw / ADC_RESOLUTION) * ADC_VREF;
         float calculatedVolt = pinVoltage * VOLTAGE_DIVIDER_RATIO;
 
-        if (calculatedVolt < 1.0f) {
-            calculatedVolt = 13.8f; // Тестовое значение бортсети при стендовых испытаниях
-        }
-        data.batteryVoltage = calculatedVolt;
+        // Меньше 1 В - делитель не подключен, считаем данные отсутствующими
+        data.batteryVoltage = (calculatedVolt < 1.0f) ? 0.0f : calculatedVolt;
     } else {
-        // Режим без АЦП (ожидание CAN) - тестовое напряжение для стенда
-        data.batteryVoltage = 13.8f;
+        // Нет источника напряжения (MS2 offline, АЦП не подключен): 0 = "нет данных"
+        data.batteryVoltage = 0.0f;
     }
 
     // Отслеживание экстремумов
     if (data.batteryVoltage > 5.0f) {
+        // Первое реальное значение после старта без данных инициализирует экстремумы
+        if (data.minCrankVoltage < 1.0f || data.maxVoltage < 1.0f) {
+            data.minCrankVoltage = data.batteryVoltage;
+            data.maxVoltage = data.batteryVoltage;
+        }
         if (data.batteryVoltage < data.minCrankVoltage) {
             data.minCrankVoltage = data.batteryVoltage;
         }
@@ -76,7 +78,9 @@ void SensorsManager::updateBatteryVoltage() {
     }
 
     // Классификация статуса напряжения
-    if (data.batteryVoltage < 11.5f) {
+    if (data.batteryVoltage < 1.0f) {
+        data.voltStatus = VoltageStatus::VOLT_NORMAL_REST; // Нет данных - без тревоги
+    } else if (data.batteryVoltage < 11.5f) {
         data.voltStatus = VoltageStatus::VOLT_CRITICAL_LOW;
     } else if (data.batteryVoltage < 12.2f) {
         data.voltStatus = VoltageStatus::VOLT_LOW;

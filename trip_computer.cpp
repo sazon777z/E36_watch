@@ -10,6 +10,7 @@ TripComputer::TripComputer()
     : lastUpdateMillis(0),
       lastSaveMillis(0),
       lastSavedOdoKm(0.0),
+      lastSavedFuelL(0.0),
       tripTimeAccumSec(0.0f) {
     memset(&data, 0, sizeof(TripData));
     data.total_odometer_km = 245000.0; // Значение по умолчанию
@@ -49,23 +50,26 @@ void TripComputer::loadFromNvs() {
     prefs.end();
 
     lastSavedOdoKm = data.total_odometer_km;
+    lastSavedFuelL = data.trip_fuel_liters;
 }
 
 void TripComputer::saveToNvs(bool force) {
-    // Сохраняем во Flash только при приросте от 1 км или по таймеру раз в 5 минут,
-    // чтобы сберечь ресурс циклов перезаписи памяти EEPROM/NVS
-    if (force || (data.total_odometer_km - lastSavedOdoKm >= 1.0) || (millis() - lastSaveMillis > 300000UL)) {
+    // Сохраняем во Flash каждые 0.2 км пробега или раз в минуту, если что-то изменилось
+    // (расход на холостых). На стоянке без изменений запись не выполняется.
+    // Объем одной записи ~4 значения, NVS распределяет износ по разделу - ресурса хватает на десятки лет.
+    bool changed = (data.total_odometer_km != lastSavedOdoKm) || (data.trip_fuel_liters != lastSavedFuelL);
+    bool due = (data.total_odometer_km - lastSavedOdoKm >= 0.2) ||
+               (changed && (millis() - lastSaveMillis > 60000UL));
+    if (force || due) {
         prefs.begin("e36_trip", false);
         prefs.putDouble("total_km_d", data.total_odometer_km);
-        prefs.putFloat("total_km", (float)data.total_odometer_km);
         prefs.putDouble("trip_km_d", data.trip_distance_km);
-        prefs.putFloat("trip_km", (float)data.trip_distance_km);
         prefs.putDouble("trip_fuel_d", data.trip_fuel_liters);
-        prefs.putFloat("trip_fuel", (float)data.trip_fuel_liters);
         prefs.putUInt("trip_time", data.trip_time_sec);
         prefs.end();
 
         lastSavedOdoKm = data.total_odometer_km;
+        lastSavedFuelL = data.trip_fuel_liters;
         lastSaveMillis = millis();
         Serial.printf("[TRIP NVS] Сохранен одометр: %.2f км\n", data.total_odometer_km);
     }
@@ -135,7 +139,9 @@ void TripComputer::update() {
     float dt = (float)(now - lastUpdateMillis) / 1000.0f;
     lastUpdateMillis = now;
 
-    if (dt <= 0.0f || dt > 2.0f) return;
+    // Кратковременные подвисания цикла (до 5 с) учитываем полностью, чтобы не терять пробег.
+    // Больший интервал - аномалия (например, после сна), такой отрезок пропускаем.
+    if (dt <= 0.0f || dt > 5.0f) return;
 
     // 1. Получаем скорость от GPS
     data.current_speed_kmh = Gps.getData().speed_kmh;

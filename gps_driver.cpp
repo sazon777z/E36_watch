@@ -4,8 +4,9 @@
 GpsDriver Gps;
 static HardwareSerial GpsSerial(1);
 
-GpsDriver::GpsDriver() : bufIdx(0), lastRtcSyncMillis(0) {
+GpsDriver::GpsDriver() : bufIdx(0), lastRtcSyncMillis(0), moveConfirmCount(0) {
     memset(&data, 0, sizeof(GpsData));
+    data.hdop = 99.0f;
     data.speed_kmh = 0.0f;
     data.hasFix = false;
     data.timeValid = false;
@@ -49,6 +50,8 @@ void GpsDriver::update() {
     if (data.hasFix && (millis() - data.lastFixMs > 4000)) {
         data.hasFix = false;
         data.speed_kmh = 0.0f;
+        data.moving = false;
+        moveConfirmCount = 0;
     }
 }
 
@@ -62,11 +65,18 @@ bool GpsDriver::verifyChecksum(const char* s) {
         i++;
     }
 
-    if (s[i] == '*') {
-        uint8_t expected = (uint8_t)strtoul(&s[i + 1], NULL, 16);
-        return (calcXor == expected);
+    // NEO-7M всегда передает контрольную сумму: строки без нее (обрыв/помеха) отбрасываем
+    if (s[i] != '*' || !isxdigit((unsigned char)s[i + 1]) || !isxdigit((unsigned char)s[i + 2])) {
+        return false;
     }
-    return true; // Если контрольная сумма отсутствует, не отбрасываем
+    uint8_t expected = (uint8_t)strtoul(&s[i + 1], NULL, 16);
+    return (calcXor == expected);
+}
+
+// Разбор двух десятичных цифр; -1 при ошибке формата
+static int parse2(const char* p) {
+    if (!isdigit((unsigned char)p[0]) || !isdigit((unsigned char)p[1])) return -1;
+    return (p[0] - '0') * 10 + (p[1] - '0');
 }
 
 void GpsDriver::parseSentence(char* sentence) {
@@ -104,10 +114,13 @@ void GpsDriver::parseRMC(char* f[], int count) {
 
     // f[1]: Время UTC (hhmmss.sss)
     if (strlen(f[1]) >= 6) {
-        data.hour = (f[1][0] - '0') * 10 + (f[1][1] - '0');
-        data.minute = (f[1][2] - '0') * 10 + (f[1][3] - '0');
-        data.second = (f[1][4] - '0') * 10 + (f[1][5] - '0');
-        data.timeValid = true;
+        int hh = parse2(f[1]), mm = parse2(f[1] + 2), ss = parse2(f[1] + 4);
+        if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59 && ss >= 0 && ss <= 60) {
+            data.hour = hh;
+            data.minute = mm;
+            data.second = (ss == 60) ? 59 : ss; // високосная секунда
+            data.timeValid = true;
+        }
     }
 
     // f[2]: Статус 'A' = валидно, 'V' = предупреждение
@@ -120,16 +133,18 @@ void GpsDriver::parseRMC(char* f[], int count) {
         // f[7]: Скорость в узлах (Knots) -> переводим в км/ч (* 1.852)
         if (strlen(f[7]) > 0) {
             float knots = atof(f[7]);
-            float kmh = knots * 1.852f;
-            // Порог фильтрации шума GPS на стоянке
-            data.speed_kmh = (kmh < 1.8f) ? 0.0f : kmh;
+            data.rawSpeed_kmh = knots * 1.852f;
+            data.speed_kmh = filterSpeed(data.rawSpeed_kmh);
         }
 
         // f[9]: Дата (ddmmyy)
         if (strlen(f[9]) >= 6) {
-            data.day = (f[9][0] - '0') * 10 + (f[9][1] - '0');
-            data.month = (f[9][2] - '0') * 10 + (f[9][3] - '0');
-            data.year = 2000 + (f[9][4] - '0') * 10 + (f[9][5] - '0');
+            int dd = parse2(f[9]), mo = parse2(f[9] + 2), yy = parse2(f[9] + 4);
+            if (dd >= 1 && dd <= 31 && mo >= 1 && mo <= 12 && yy >= 0) {
+                data.day = dd;
+                data.month = mo;
+                data.year = 2000 + yy;
+            }
         }
 
         // Автосинхронизация RTC часов при первом фиксе или раз в 60 сек
@@ -152,10 +167,37 @@ void GpsDriver::parseGGA(char* f[], int count) {
     // f[7]: Число видимых спутников в решении
     data.satellites = (uint8_t)atoi(f[7]);
 
+    // f[8]: HDOP (точность в плане)
+    data.hdop = (strlen(f[8]) > 0) ? atof(f[8]) : 99.0f;
+
     // f[9]: Высота над уровнем моря (м)
     if (count > 9 && strlen(f[9]) > 0) {
         data.altitude_m = atof(f[9]);
     }
+}
+
+// Фильтр стоянки: отсекает дрейф скорости при неподвижном автомобиле (вызывается раз в фикс RMC)
+float GpsDriver::filterSpeed(float kmh) {
+    bool goodSignal = (data.satellites >= GPS_MIN_SATELLITES) && (data.hdop <= GPS_MAX_HDOP);
+
+    if (data.moving) {
+        // В движении: останавливаемся при малой скорости или потере качества приема
+        if (kmh < GPS_MOVE_STOP_KMH || !goodSignal) {
+            data.moving = false;
+            moveConfirmCount = 0;
+        }
+    } else {
+        // На стоянке: движение подтверждаем только N фиксов подряд выше порога
+        if (goodSignal && kmh >= GPS_MOVE_START_KMH) {
+            if (++moveConfirmCount >= GPS_MOVE_CONFIRM_FIXES) {
+                data.moving = true;
+            }
+        } else {
+            moveConfirmCount = 0;
+        }
+    }
+
+    return data.moving ? kmh : 0.0f;
 }
 
 void GpsDriver::syncRtcTime() {

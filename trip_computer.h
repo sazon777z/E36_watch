@@ -39,6 +39,7 @@ public:
     void resetTrip();
     void resetPeaks();
     void setTotalOdometer(double km);
+    void saveNow() { saveToNvs(true); } // Принудительное сохранение (перед сном)
 
     const TripData& getData() const { return data; }
     const TripPeaks& getPeaks() const { return peaks; }
@@ -49,6 +50,7 @@ private:
     unsigned long lastUpdateMillis;
     unsigned long lastSaveMillis;
     double lastSavedOdoKm;
+    double lastSavedFuelL;
     float tripTimeAccumSec;
 
     void loadFromNvs();

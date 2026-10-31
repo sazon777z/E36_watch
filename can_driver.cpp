@@ -66,25 +66,44 @@ bool CanDriver::init() {
     return true;
 }
 
+void CanDriver::shutdown() {
+    if (!isDriverInstalled) return;
+    twai_stop();
+    twai_driver_uninstall();
+    isDriverInstalled = false;
+}
+
 void CanDriver::update() {
     if (!isDriverInstalled) return;
 
     // Автоматическое восстановление CAN-контроллера при переходе в Bus-Off (помехи / стартер)
-    twai_status_info_t status;
-    if (twai_get_status_info(&status) == ESP_OK) {
-        if (status.state == TWAI_STATE_BUS_OFF) {
-            static unsigned long lastRecoveryAttempt = 0;
-            if (millis() - lastRecoveryAttempt > 1000) {
-                lastRecoveryAttempt = millis();
-                if (twai_initiate_recovery() == ESP_OK) {
-                    telemetry.busRecoveries++;
-                    Serial.printf("[CAN WARN] Обнаружен Bus-Off. Запущено автовосстановление шины (попытка %lu)\n",
-                                  telemetry.busRecoveries);
+    // Состояние шины проверяем не чаще раза в 100 мс; восстановление/перезапуск - не чаще раза в секунду
+    static unsigned long lastStatusCheck = 0;
+    static unsigned long lastRecoveryAttempt = 0;
+    unsigned long now = millis();
+    if (now - lastStatusCheck >= 100) {
+        lastStatusCheck = now;
+        twai_status_info_t status;
+        if (twai_get_status_info(&status) == ESP_OK) {
+            if (status.state == TWAI_STATE_BUS_OFF) {
+                if (now - lastRecoveryAttempt > 1000) {
+                    lastRecoveryAttempt = now;
+                    if (twai_initiate_recovery() == ESP_OK) {
+                        telemetry.busRecoveries++;
+                        Serial.printf("[CAN WARN] Обнаружен Bus-Off. Запущено автовосстановление шины (попытка %lu)\n",
+                                      (unsigned long)telemetry.busRecoveries);
+                    }
                 }
-            }
-        } else if (status.state == TWAI_STATE_STOPPED) {
-            if (twai_start() == ESP_OK) {
-                Serial.println("[CAN OK] TWAI контроллер успешно перезапущен после восстановления шины.");
+            } else if (status.state == TWAI_STATE_STOPPED) {
+                if (now - lastRecoveryAttempt > 1000) {
+                    lastRecoveryAttempt = now;
+                    esp_err_t err = twai_start();
+                    if (err == ESP_OK) {
+                        Serial.println("[CAN OK] TWAI контроллер успешно перезапущен после восстановления шины.");
+                    } else {
+                        Serial.printf("[CAN ERROR] Не удалось перезапустить TWAI: 0x%x\n", err);
+                    }
+                }
             }
         }
     }
@@ -98,6 +117,14 @@ void CanDriver::update() {
     // Проверка таймаута связи с ЭБУ MegaSquirt 2
     if (telemetry.isOnline && (millis() - telemetry.lastPacketMs > 2500)) {
         telemetry.isOnline = false;
+        // Обнуляем динамические параметры, чтобы нигде не использовались устаревшие значения
+        telemetry.rpm = 0;
+        telemetry.pw1_us = 0;
+        telemetry.tps_pct = 0.0f;
+        telemetry.boost_bar = 0.0f;
+        telemetry.speed_kmh = 0;
+        telemetry.advance_deg = 0.0f;
+        telemetry.batt_volt = 0.0f;
         Serial.println("[CAN WARN] Таймаут связи с MegaSquirt 2 (OFFLINE)");
     }
 }

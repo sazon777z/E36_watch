@@ -11,7 +11,10 @@ struct GpsData {
     double latitude;        // Широта
     double longitude;       // Долгота
     float altitude_m;       // Высота над уровнем моря (м)
-    
+    float hdop;             // Геометрический фактор точности (меньше - лучше, 99 = нет данных)
+    float rawSpeed_kmh;     // Скорость от модуля без фильтра стоянки (для диагностики)
+    bool moving;            // Фильтр признал движение реальным
+
     // Атомное время со спутников (UTC)
     int year;
     int month;
@@ -43,6 +46,9 @@ private:
     char buffer[128];
     uint8_t bufIdx;
     unsigned long lastRtcSyncMillis;
+    uint8_t moveConfirmCount;
+
+    float filterSpeed(float kmh);
 
     void parseSentence(char* sentence);
     void parseRMC(char* f[], int count);

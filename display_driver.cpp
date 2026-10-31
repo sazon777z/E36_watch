@@ -21,6 +21,9 @@ void DisplayDriver::setBrightness(uint8_t brightness) {
 }
 
 bool DisplayDriver::init() {
+    // 0. Снимаем удержание пина подсветки, установленное перед глубоким сном
+    gpio_hold_dis((gpio_num_t)PIN_TFT_BL);
+
     // 1. Принудительно выключаем подсветку при старте (гарантирует отсутствие белого шума и вспышек)
     pinMode(PIN_TFT_BL, OUTPUT);
     digitalWrite(PIN_TFT_BL, LOW);
@@ -87,6 +90,19 @@ void DisplayDriver::fadeIn(uint8_t targetBrightness, uint16_t delayMs) {
 
 void DisplayDriver::fadeOut(uint16_t delayMs) {
     (void)delayMs;
+}
+
+void DisplayDriver::sleep() {
+    digitalWrite(PIN_TFT_BL, LOW);
+    currentBrightness = 0;
+    if (tft) {
+        tft->fillScreen(COLOR_BLACK);
+        tft->sendCommand(ST77XX_DISPOFF);
+        tft->sendCommand(ST77XX_SLPIN);
+        delay(10);
+    }
+    // В глубоком сне GPIO отпускаются - удерживаем подсветку выключенной
+    gpio_hold_en((gpio_num_t)PIN_TFT_BL);
 }
 
 void DisplayDriver::clear(uint16_t color) {

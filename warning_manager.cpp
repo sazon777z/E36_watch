@@ -47,31 +47,43 @@ void WarningManager::saveToNvs() {
     Serial.println("[WARN NVS] Пороги предупреждений сохранены во Flash.");
 }
 
-void WarningManager::setEnabled(bool en) {
-    settings.enabled = en;
-    saveToNvs();
+void WarningManager::setEnabled(bool en, bool save) {
+    if (settings.enabled != en) {
+        settings.enabled = en;
+        dirtySettings = true;
+    }
+    if (save) commit();
 }
 
-void WarningManager::setBoostMax(float bar) {
-    if (bar > 0.0f && bar <= 3.5f) {
+bool WarningManager::setBoostMax(float bar, bool save) {
+    if (!(bar > 0.0f && bar <= 3.5f)) return false;
+    if (settings.boost_max_bar != bar) {
         settings.boost_max_bar = bar;
-        saveToNvs();
+        dirtySettings = true;
     }
+    if (save) commit();
+    return true;
 }
 
-void WarningManager::setCltMax(float degC) {
-    if (degC >= 40.0f && degC <= 140.0f) {
+bool WarningManager::setCltMax(float degC, bool save) {
+    if (!(degC >= 40.0f && degC <= 140.0f)) return false;
+    if (settings.clt_max_c != degC) {
         settings.clt_max_c = degC;
-        saveToNvs();
+        dirtySettings = true;
     }
+    if (save) commit();
+    return true;
 }
 
-void WarningManager::setAfrLimits(float richMin, float leanMax) {
-    if (richMin >= 8.0f && leanMax <= 22.0f && richMin < leanMax) {
+bool WarningManager::setAfrLimits(float richMin, float leanMax, bool save) {
+    if (!(richMin >= 8.0f && leanMax <= 22.0f && richMin < leanMax)) return false;
+    if (settings.afr_rich_min != richMin || settings.afr_lean_max != leanMax) {
         settings.afr_rich_min = richMin;
         settings.afr_lean_max = leanMax;
-        saveToNvs();
+        dirtySettings = true;
     }
+    if (save) commit();
+    return true;
 }
 
 void WarningManager::update(const SensorData& sens) {
@@ -97,9 +109,8 @@ void WarningManager::update(const SensorData& sens) {
         state.boostAlarm = false;
     }
 
-    // 2. Температура двигателя (COOLANT)
-    float curClt = sens.ms2Online ? sens.ms2.clt_c : sens.tempOutdoor;
-    state.cltAlarm = (curClt >= settings.clt_max_c);
+    // 2. Температура двигателя (COOLANT) - только по реальным данным ЭБУ
+    state.cltAlarm = sens.ms2Online && (sens.ms2.clt_c >= settings.clt_max_c);
 
     // 3. Смесь (AFR)
     // Предупреждение о смеси активно только когда мотор заведен (RPM >= 600)
