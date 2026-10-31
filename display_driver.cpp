@@ -60,7 +60,7 @@ bool DisplayDriver::init() {
 
     // 5. Стандартная инициализация ST7789 для дисплея 240x320
     tft->init(240, 320);
-    tft->setSPISpeed(20000000); // 20 MHz SPI - стабильная скорость без помех
+    tft->setSPISpeed(DISPLAY_SPI_HZ); // см. config.h: выше частота - выше FPS
     tft->setRotation(DISPLAY_ROTATION);
 
     // Пауза 120 мс для встроенных генераторов напряжений (charge pumps) Sitronix ST7789.

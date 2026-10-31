@@ -61,6 +61,9 @@
 #define SCREEN_HEIGHT     240
 // 1 = Альбомная (320x240), 3 = Альбомная перевернутая, 0 = Портретная (240x320)
 #define DISPLAY_ROTATION  3
+// Частота SPI дисплея. 40 МГц вдвое быстрее прежних 20 МГц (плавнее анимации).
+// Если появятся артефакты/полосы (длинные провода) - верните 20000000.
+#define DISPLAY_SPI_HZ    40000000
 
 #define DEFAULT_BRIGHTNESS      255   // Постоянная максимальная яркость (100%)
 #define FADE_STEP_DELAY_MS      4
@@ -68,12 +71,9 @@
 // =============================================================================
 // НАСТРОЙКИ BLUETOOTH LOW ENERGY (BLE)
 // =============================================================================
+// Bluetooth используется только для обновления прошивки (страница ota.html)
 #define BLE_DEVICE_NAME         "BMW-E36-OBC"
-// Стандартный Nordic UART Service (NUS)
-#define BLE_SERVICE_UUID        "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-#define BLE_CHAR_RX_UUID        "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
-#define BLE_CHAR_TX_UUID        "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
-#define DEFAULT_TIMEZONE_OFFSET 3     // Смещение часового пояса (UTC+3)
+#define DEFAULT_TIMEZONE_OFFSET 3     // Часовой пояс по умолчанию (UTC+3); меняется командой 'z' в мониторе порта
 
 // Защита BLE: сопряжение с PIN-кодом и шифрование всех характеристик.
 // При первом подключении телефон/ПК попросит ввести BLE_PASSKEY (6 цифр).

@@ -9,24 +9,22 @@
 #include "gps_driver.h"
 #include "trip_computer.h"
 #include "bmw_theme.h"
-
 #include "warning_manager.h"
 
 // Объявления кастомных 4bpp сглаженных шрифтов
 extern "C" {
     extern const lv_font_t lv_font_clock_70;
-    extern const lv_font_t lv_font_clock_96;
     extern const lv_font_t lv_font_telemetry_24;
 }
 
 enum class ScreenId {
     BOOT_SPLASH = 0,
-    CLASSIC_CLOCK,       // 1
-    OBC_TRIP_FUEL,       // 2
-    OBC_TELEMETRY,       // 3
-    M_PERFORMANCE,       // 4
-    SINGLE_GAUGE,        // 5: Полноэкранный цифровой прибор
-    SETTINGS_INFO,       // 6: Настройки и инфо
+    CLASSIC_CLOCK,       // 1: Часы + BOOST / COOLANT / AFR
+    OBC_TRIP_FUEL,       // 2: Скорость, расход, трип
+    OBC_TELEMETRY,       // 3: Телеметрия мотора
+    M_PERFORMANCE,       // 4: ///M тахометр с шифт-лайтом
+    SINGLE_GAUGE,        // 5: Полноэкранный стрелочный прибор
+    SETTINGS_INFO,       // 6: Система
     COUNT
 };
 
@@ -41,19 +39,48 @@ enum class GaugeType {
     COUNT
 };
 
+// Плавное (экспоненциальное) приближение отображаемого значения к реальному
+struct SmoothValue {
+    float value = 0.0f;
+    bool primed = false;
+    float step(float target, float dtSec, float tauSec);
+    void snap(float target) { value = target; primed = true; }
+};
+
+// Метка, которая перерисовывается только при реальном изменении текста
+struct CachedLabel {
+    lv_obj_t* obj = nullptr;
+    char last[32] = {0};
+    bool initialized = false;
+    void set(const char* text);
+    void setf(const char* fmt, ...);
+};
+
+// Плитка: заголовок, значение, единица и мини-шкала
+struct Tile {
+    lv_obj_t* box = nullptr;
+    CachedLabel value;
+    CachedLabel sub;
+    lv_obj_t* bar = nullptr;
+    int32_t lastBar = INT32_MIN;
+    uintptr_t alarmState = 0;
+    void setBar(int32_t v);
+    void setAlarm(bool alarm, bool blinkPhase);
+};
+
 class UiEngine {
 public:
     UiEngine();
 
     void init();
-    void update();
+    void update();   // Вызывается в каждом проходе loop(): данные ~30 Гц, отрисовка до 60 Гц
 
-    // Переключение экранов
+    // Переключение экранов (с анимацией сдвига)
     void nextScreen();
     void setScreen(ScreenId screen);
     ScreenId getCurrentScreen() const { return currentScreen; }
 
-    // Управление полноэкранным аналоговым прибором
+    // Полноэкранный прибор
     void setGaugeType(GaugeType type);
     void nextGaugeType();
     GaugeType getGaugeType() const { return currentGauge; }
@@ -64,105 +91,79 @@ public:
     // Визуальное подтверждение сброса пробега
     void notifyTripReset();
 
-    // Заглушки для совместимости
-    void toggleStopwatch() {}
-    void resetStopwatch() {}
+    // Снимок экрана в монитор порта (команда 'c'), для отладки дизайна
+    void captureScreen();
 
 private:
     ScreenId currentScreen;
-    ScreenId lastScreen;
-    bool colonState;
-    unsigned long lastColonBlinkMillis;
-    unsigned long lastTickMillis;
-    unsigned long tripResetNoticeMillis;
+    GaugeType currentGauge;
+    unsigned long lastDataMs;
+    unsigned long tripResetNoticeMs;
 
-    // LVGL дисплейный буфер (320 x 40 строк в SRAM - быстрый, стабильный без задержек по SPI)
-    static const uint32_t LV_BUF_LINES = 40;
+    // LVGL дисплейный буфер
+    static const uint32_t LV_BUF_LINES = 48;
     lv_disp_draw_buf_t draw_buf;
     lv_color_t buf_1[320 * LV_BUF_LINES];
     lv_disp_drv_t disp_drv;
 
-    // LVGL Экраны
-    lv_obj_t* scr_clock;
-    lv_obj_t* scr_trip;
-    lv_obj_t* scr_telem;
-    lv_obj_t* scr_m_perf;
-    lv_obj_t* scr_gauge;
-    lv_obj_t* scr_settings;
+    lv_obj_t* screens[(int)ScreenId::COUNT];
 
-    // Виджеты Экрана 1: Часы и нижняя телеметрия
-    lv_obj_t* lbl_clock;
-    lv_obj_t* lbl_gps_sats_1;
-    lv_obj_t* lbl_ms2_status_1;
-    lv_obj_t* card_boost_1;
-    lv_obj_t* lbl_boost_val;
-    lv_obj_t* lbl_boost_sub;
-    lv_obj_t* card_clt_1;
-    lv_obj_t* lbl_clt_val;
-    lv_obj_t* lbl_clt_sub;
-    lv_obj_t* card_afr_1;
-    lv_obj_t* lbl_afr_val;
-    lv_obj_t* lbl_afr_sub;
+    // Общий верхний слой (не уезжает при смене экранов)
+    lv_obj_t* ms2Dot;
+    CachedLabel ms2Text;
+    CachedLabel titleLbl;
+    CachedLabel gpsLbl;
+    lv_obj_t* pageDots[(int)ScreenId::COUNT - 1];
 
-    // Виджеты Экрана 2: Бортовой компьютер и расход (3 плитки)
-    lv_obj_t* lbl_trip_spd;
-    lv_obj_t* lbl_trip_fix;
-    lv_obj_t* lbl_trip_inst;
-    lv_obj_t* card_trip_dist;
-    lv_obj_t* lbl_trip_dist;
-    lv_obj_t* lbl_trip_reset_hint;
-    lv_obj_t* card_trip_avg;
-    lv_obj_t* lbl_trip_avg;
-    lv_obj_t* card_trip_fuel;
-    lv_obj_t* lbl_trip_fuel;
-    lv_obj_t* lbl_gps_sats_2;
-    lv_obj_t* lbl_ms2_status_2;
+    // Экран 1: часы
+    // Часы: часы, двоеточие и минуты - отдельные метки, двоеточие мигает прозрачностью
+    // (цифры не сдвигаются, в отличие от замены ':' на пробел)
+    CachedLabel clockH;
+    CachedLabel clockM;
+    lv_obj_t* clockColon;
+    int8_t colonShown;
+    Tile clkBoost, clkClt, clkAfr;
 
-    // Виджеты Экрана 3: Телеметрия мотора
-    lv_obj_t* lbl_telem_volt;
-    lv_obj_t* lbl_telem_volt_sub;
-    lv_obj_t* card_telem_clt;
-    lv_obj_t* lbl_telem_clt;
-    lv_obj_t* lbl_telem_clt_sub;
-    lv_obj_t* card_telem_afr;
-    lv_obj_t* lbl_telem_afr;
-    lv_obj_t* lbl_telem_afr_sub;
-    lv_obj_t* lbl_telem_tps;
-    lv_obj_t* lbl_telem_tps_sub;
-    lv_obj_t* card_telem_boost;
-    lv_obj_t* lbl_telem_boost_txt;
-    lv_obj_t* bar_telem_boost;
-    lv_obj_t* lbl_gps_sats_3;
-    lv_obj_t* lbl_ms2_status_3;
+    // Экран 2: трип
+    CachedLabel tripSpeed;
+    CachedLabel tripFix;
+    CachedLabel tripInst;
+    CachedLabel tripInstUnit;
+    lv_obj_t* tripInstBar;
+    int32_t tripInstBarLast;
+    Tile tripDist, tripAvg, tripFuel;
 
-    // Виджеты Экрана 4: ///M Тахометр
-    lv_obj_t* lbl_m_rpm;
-    lv_obj_t* bar_m_shift;
-    lv_obj_t* card_m_boost;
-    lv_obj_t* lbl_m_boost;
-    lv_obj_t* lbl_m_adv;
-    lv_obj_t* lbl_m_offline;
-    lv_obj_t* lbl_gps_sats_4;
-    lv_obj_t* lbl_ms2_status_4;
+    // Экран 3: мотор
+    Tile engVolt, engClt, engAfr, engTps;
+    Tile engBoost;
 
-    // Виджеты Экрана 5: Полноэкранный цифровой прибор
-    GaugeType currentGauge;
-    lv_obj_t* card_digital_gauge;
-    lv_obj_t* lbl_digital_title;
-    lv_obj_t* lbl_digital_val;
-    lv_obj_t* lbl_digital_unit;
-    lv_obj_t* lbl_digital_peak;
-    lv_obj_t* lbl_digital_warn_limit;
-    lv_obj_t* lbl_ms2_status_5;
-    lv_obj_t* lbl_gps_sats_5;
+    // Экран 4: ///M
+    static const int SHIFT_SEGMENTS = 16;
+    lv_obj_t* shiftSeg[SHIFT_SEGMENTS];
+    int8_t shiftLit;
+    bool shiftFlash;
+    CachedLabel mRpm;
+    Tile mBoost, mAdv;
 
-    // Виджеты Экрана 6: Настройки и инфо
-    lv_obj_t* lbl_set_ble;
-    lv_obj_t* lbl_set_can;
-    lv_obj_t* lbl_set_gps;
-    lv_obj_t* lbl_set_sys;
+    // Экран 5: прибор
+    lv_obj_t* gaugeArc;
+    int32_t gaugeArcLast;
+    CachedLabel gaugeVal;
+    CachedLabel gaugeUnit;
+    CachedLabel gaugePeak;
+    CachedLabel gaugeLimit;
+    CachedLabel gaugeMin;
+    CachedLabel gaugeMax;
+    uintptr_t gaugeAlarmState;
 
-    // Создание экранов
+    // Экран 6: система
+    CachedLabel infoBle, infoCan, infoGps, infoFw;
+
+    // Сглаженные значения
+    SmoothValue sRpm, sBoost, sAfr, sClt, sMat, sTps, sVolt, sAdv, sSpeed, sInst;
+
+    // Построение интерфейса
+    void createTopLayer();
     void createScreenClock();
     void createScreenTrip();
     void createScreenTelem();
@@ -171,17 +172,18 @@ private:
     void createScreenSettings();
 
     // Обновление данных
+    void stepSmoothing(float dt);
+    void updateTopLayer();
     void updateClockScreen();
     void updateTripScreen();
     void updateTelemScreen();
     void updateMPerfScreen();
-    void updateGaugeScreen();
+    void updateGaugeScreen(bool force = false);
     void updateSettingsScreen();
 
     void loadGaugeFromNvs();
     void saveGaugeToNvs();
 
-    // Callbacks LVGL
     static void dispFlushCb(lv_disp_drv_t* disp_drv, const lv_area_t* area, lv_color_t* color_p);
 };
 

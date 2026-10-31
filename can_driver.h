@@ -38,12 +38,19 @@ public:
     void update();
     void shutdown(); // Остановка TWAI перед глубоким сном
 
+    // Демо-режим для стенда: имитация вещания MegaSquirt (команда 'd' в мониторе порта)
+    void setDemo(bool on);
+    bool isDemo() const { return demoMode; }
+
     const Ms2Telemetry& getTelemetry() const { return telemetry; }
     bool isConnected() const { return telemetry.isOnline; }
 
 private:
     Ms2Telemetry telemetry;
     bool isDriverInstalled;
+    bool demoMode;
+
+    void updateDemo();
 
     void parsePacket(const twai_message_t& msg);
     void parseMs2RealtimeAdv(uint32_t canId, const uint8_t* data, uint8_t len);

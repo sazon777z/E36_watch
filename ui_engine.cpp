@@ -1,103 +1,212 @@
 #include "ui_engine.h"
 #include "ble_manager.h"
+#include "can_driver.h"
+#include "ota_manager.h"
 #include <Preferences.h>
+#include <stdarg.h>
 #include <Fonts/FreeSansBoldOblique12pt7b.h>
+
+extern "C" {
+    extern const lv_font_t lv_font_clock_96;
+}
 
 UiEngine UI;
 
-// Цвета BMW Motorsport / OEM+ Cockpit
-#define COLOR_LV_WHITE        lv_color_make(255, 255, 255)
-#define COLOR_LV_BLACK        lv_color_make(0, 0, 0)
-#define COLOR_LV_SILVER       lv_color_make(170, 175, 185)
-#define COLOR_LV_CARD_BG      lv_color_make(18, 20, 25)
-#define COLOR_LV_CARD_BORDER  lv_color_make(48, 52, 64)
-#define COLOR_LV_DARK_GRAY    lv_color_make(40, 42, 50)
-#define COLOR_LV_MID_GRAY     lv_color_make(115, 120, 130)
-#define COLOR_LV_M_RED        lv_color_make(225, 30, 40)
-#define COLOR_LV_M_BLUE       lv_color_make(0, 102, 177)
-#define COLOR_LV_M_CYAN       lv_color_make(0, 176, 255)
-#define COLOR_LV_ONLINE       lv_color_make(0, 230, 118)
-#define COLOR_LV_OFFLINE      lv_color_make(115, 120, 130)
+// =============================================================================
+// ПАЛИТРА: черный фон, янтарная подсветка в духе приборки E36, ///M акценты
+// =============================================================================
+#define C_BG          lv_color_hex(0x000000)
+#define C_SURFACE     lv_color_hex(0x101216)
+#define C_SURFACE2    lv_color_hex(0x1C2027)
+#define C_TEXT        lv_color_hex(0xFFFFFF)
+#define C_DIM         lv_color_hex(0x7D848F)
+#define C_ACCENT      lv_color_hex(0xFF8A1F)   // янтарный (подсветка E36)
+#define C_M_BLUE      lv_color_hex(0x1C69D4)
+#define C_M_LBLUE     lv_color_hex(0x4FA3FF)
+#define C_M_RED       lv_color_hex(0xE11E28)
+#define C_OK          lv_color_hex(0x19D27A)
+#define C_ALARM_BG    lv_color_hex(0xC8141E)
 
-UiEngine::UiEngine()
-    : currentScreen(ScreenId::CLASSIC_CLOCK),
-      lastScreen(ScreenId::BOOT_SPLASH),
-      colonState(true),
-      lastColonBlinkMillis(0),
-      lastTickMillis(0),
-      tripResetNoticeMillis(0),
-      scr_clock(nullptr),
-      scr_trip(nullptr),
-      scr_telem(nullptr),
-      scr_m_perf(nullptr),
-      scr_gauge(nullptr),
-      scr_settings(nullptr),
-      lbl_clock(nullptr),
-      lbl_gps_sats_1(nullptr),
-      lbl_ms2_status_1(nullptr),
-      card_boost_1(nullptr),
-      lbl_boost_val(nullptr),
-      lbl_boost_sub(nullptr),
-      card_clt_1(nullptr),
-      lbl_clt_val(nullptr),
-      lbl_clt_sub(nullptr),
-      card_afr_1(nullptr),
-      lbl_afr_val(nullptr),
-      lbl_afr_sub(nullptr),
-      lbl_trip_spd(nullptr),
-      lbl_trip_fix(nullptr),
-      lbl_trip_inst(nullptr),
-      card_trip_dist(nullptr),
-      lbl_trip_dist(nullptr),
-      lbl_trip_reset_hint(nullptr),
-      card_trip_avg(nullptr),
-      lbl_trip_avg(nullptr),
-      card_trip_fuel(nullptr),
-      lbl_trip_fuel(nullptr),
-      lbl_gps_sats_2(nullptr),
-      lbl_ms2_status_2(nullptr),
-      lbl_telem_volt(nullptr),
-      lbl_telem_volt_sub(nullptr),
-      card_telem_clt(nullptr),
-      lbl_telem_clt(nullptr),
-      lbl_telem_clt_sub(nullptr),
-      card_telem_afr(nullptr),
-      lbl_telem_afr(nullptr),
-      lbl_telem_afr_sub(nullptr),
-      lbl_telem_tps(nullptr),
-      lbl_telem_tps_sub(nullptr),
-      card_telem_boost(nullptr),
-      lbl_telem_boost_txt(nullptr),
-      bar_telem_boost(nullptr),
-      lbl_gps_sats_3(nullptr),
-      lbl_ms2_status_3(nullptr),
-      lbl_m_rpm(nullptr),
-      bar_m_shift(nullptr),
-      card_m_boost(nullptr),
-      lbl_m_boost(nullptr),
-      lbl_m_adv(nullptr),
-      lbl_m_offline(nullptr),
-      lbl_gps_sats_4(nullptr),
-      lbl_ms2_status_4(nullptr),
-      currentGauge(GaugeType::BOOST),
-      card_digital_gauge(nullptr),
-      lbl_digital_title(nullptr),
-      lbl_digital_val(nullptr),
-      lbl_digital_unit(nullptr),
-      lbl_digital_peak(nullptr),
-      lbl_digital_warn_limit(nullptr),
-      lbl_ms2_status_5(nullptr),
-      lbl_gps_sats_5(nullptr),
-      lbl_set_ble(nullptr),
-      lbl_set_can(nullptr),
-      lbl_set_gps(nullptr),
-      lbl_set_sys(nullptr) {
+static const int CONTENT_TOP = 26;     // Под верхней строкой статуса
+static const uint32_t DATA_PERIOD_MS = 33;   // Обновление данных и сглаживания ~30 Гц
+static const uint32_t SCREEN_ANIM_MS = 220;  // Длительность сдвига экрана
+
+// Захват кадра в монитор порта
+static volatile bool g_capture = false;
+
+// USB CDC может принять меньше, чем просили (буфер полон) - дописываем остаток
+static void serialWriteAll(const uint8_t* p, size_t len) {
+    unsigned long start = millis();
+    while (len > 0 && millis() - start < 3000) {
+        size_t n = Serial.write(p, len > 256 ? 256 : len);
+        if (n == 0) {
+            delay(1);
+            continue;
+        }
+        p += n;
+        len -= n;
+    }
 }
 
-// -----------------------------------------------------------------------------
-// Callback сброса буфера кадра LVGL на дисплей ST7789 через SPI
-// -----------------------------------------------------------------------------
-void UiEngine::dispFlushCb(lv_disp_drv_t* disp_drv, const lv_area_t* area, lv_color_t* color_p) {
+// =============================================================================
+// ВСПОМОГАТЕЛЬНЫЕ СТРУКТУРЫ
+// =============================================================================
+float SmoothValue::step(float target, float dtSec, float tauSec) {
+    if (!primed) {
+        snap(target);
+        return value;
+    }
+    float k = 1.0f - expf(-dtSec / tauSec);
+    value += (target - value) * k;
+    return value;
+}
+
+void CachedLabel::set(const char* text) {
+    if (!obj) return;
+    if (initialized && strncmp(last, text, sizeof(last) - 1) == 0) return;
+    initialized = true;
+    strncpy(last, text, sizeof(last) - 1);
+    last[sizeof(last) - 1] = '\0';
+    lv_label_set_text(obj, text);
+}
+
+void CachedLabel::setf(const char* fmt, ...) {
+    char buf[sizeof(last)];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    set(buf);
+}
+
+void Tile::setBar(int32_t v) {
+    if (!bar || v == lastBar) return;
+    lastBar = v;
+    lv_bar_set_value(bar, v, LV_ANIM_OFF);
+}
+
+void Tile::setAlarm(bool alarm, bool blinkPhase) {
+    if (!box) return;
+    uintptr_t target = alarm ? (blinkPhase ? 2 : 1) : 0;
+    if (target == alarmState) return;
+    alarmState = target;
+    // 2 = красная заливка, 1 = красная рамка (пауза мигания), 0 = норма
+    lv_obj_set_style_bg_color(box, target == 2 ? C_ALARM_BG : C_SURFACE, 0);
+    lv_obj_set_style_border_width(box, target ? 2 : 0, 0);
+    lv_obj_set_style_border_color(box, C_M_RED, 0);
+    if (bar) {
+        lv_obj_set_style_bg_color(bar, alarm ? C_TEXT : C_ACCENT, LV_PART_INDICATOR);
+    }
+}
+
+// =============================================================================
+// ПОСТРОИТЕЛИ ВИДЖЕТОВ
+// =============================================================================
+static lv_obj_t* makeBox(lv_obj_t* parent, int x, int y, int w, int h, lv_color_t color, int radius) {
+    lv_obj_t* o = lv_obj_create(parent);
+    lv_obj_remove_style_all(o);
+    lv_obj_set_pos(o, x, y);
+    lv_obj_set_size(o, w, h);
+    lv_obj_set_style_bg_color(o, color, 0);
+    lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(o, radius, 0);
+    lv_obj_clear_flag(o, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    return o;
+}
+
+static lv_obj_t* makeLabel(lv_obj_t* parent, const lv_font_t* font, lv_color_t color, const char* text) {
+    lv_obj_t* l = lv_label_create(parent);
+    lv_obj_set_style_text_font(l, font, 0);
+    lv_obj_set_style_text_color(l, color, 0);
+    lv_label_set_text(l, text);
+    return l;
+}
+
+static lv_obj_t* makeCaption(lv_obj_t* parent, const char* text) {
+    lv_obj_t* l = makeLabel(parent, &lv_font_montserrat_12, C_ACCENT, text);
+    lv_obj_set_style_text_letter_space(l, 1, 0);
+    return l;
+}
+
+static lv_obj_t* makeBar(lv_obj_t* parent, int x, int y, int w, int h, int32_t minV, int32_t maxV) {
+    lv_obj_t* b = lv_bar_create(parent);
+    lv_obj_remove_style_all(b);
+    lv_obj_set_pos(b, x, y);
+    lv_obj_set_size(b, w, h);
+    lv_obj_set_style_bg_color(b, C_SURFACE2, 0);
+    lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(b, h / 2, 0);
+    lv_obj_set_style_bg_color(b, C_ACCENT, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(b, LV_OPA_COVER, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(b, h / 2, LV_PART_INDICATOR);
+    lv_bar_set_range(b, minV, maxV);
+    lv_bar_set_value(b, minV, LV_ANIM_OFF);
+    return b;
+}
+
+// Плитка: заголовок слева, единица справа, крупное значение, подпись или мини-шкала снизу
+static void makeTile(Tile& t, lv_obj_t* parent, int x, int y, int w, int h,
+                     const char* caption, const char* unit, int valueY,
+                     bool withSub, int32_t barMin, int32_t barMax) {
+    t.box = makeBox(parent, x, y, w, h, C_SURFACE, 10);
+
+    lv_obj_t* cap = makeCaption(t.box, caption);
+    lv_obj_set_pos(cap, 10, 8);
+
+    if (unit && unit[0]) {
+        lv_obj_t* u = makeLabel(t.box, &lv_font_montserrat_12, C_DIM, unit);
+        lv_obj_align(u, LV_ALIGN_TOP_RIGHT, -10, 8);
+    }
+
+    t.value.obj = makeLabel(t.box, &lv_font_telemetry_24, C_TEXT, "--");
+    lv_obj_set_pos(t.value.obj, 10, valueY);
+
+    if (withSub) {
+        t.sub.obj = makeLabel(t.box, &lv_font_montserrat_12, C_DIM, "");
+        lv_obj_align(t.sub.obj, LV_ALIGN_BOTTOM_LEFT, 10, -8);
+    }
+    if (barMin != barMax) {
+        t.bar = makeBar(t.box, 10, h - 14, w - 20, 5, barMin, barMax);
+    }
+}
+
+static lv_obj_t* makeScreen() {
+    lv_obj_t* s = lv_obj_create(NULL);
+    lv_obj_remove_style_all(s);
+    lv_obj_set_style_bg_color(s, C_BG, 0);
+    lv_obj_set_style_bg_opa(s, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(s, LV_OBJ_FLAG_SCROLLABLE);
+    return s;
+}
+
+static int32_t clampI(int32_t v, int32_t lo, int32_t hi) {
+    return v < lo ? lo : (v > hi ? hi : v);
+}
+
+// =============================================================================
+// ДРАЙВЕР ДИСПЛЕЯ
+// =============================================================================
+UiEngine::UiEngine()
+    : currentScreen(ScreenId::CLASSIC_CLOCK),
+      currentGauge(GaugeType::BOOST),
+      lastDataMs(0),
+      tripResetNoticeMs(0),
+      clockColon(nullptr),
+      colonShown(-1),
+      ms2Dot(nullptr),
+      tripInstBar(nullptr),
+      tripInstBarLast(INT32_MIN),
+      shiftLit(-1),
+      shiftFlash(false),
+      gaugeArc(nullptr),
+      gaugeArcLast(INT32_MIN),
+      gaugeAlarmState(0xFF) {
+    memset(screens, 0, sizeof(screens));
+    memset(pageDots, 0, sizeof(pageDots));
+    memset(shiftSeg, 0, sizeof(shiftSeg));
+}
+
+void UiEngine::dispFlushCb(lv_disp_drv_t* drv, const lv_area_t* area, lv_color_t* color_p) {
     uint32_t w = (area->x2 - area->x1 + 1);
     uint32_t h = (area->y2 - area->y1 + 1);
 
@@ -106,104 +215,46 @@ void UiEngine::dispFlushCb(lv_disp_drv_t* disp_drv, const lv_area_t* area, lv_co
     tft.setAddrWindow(area->x1, area->y1, w, h);
     // bigEndian = true, так как в lv_conf.h активирован LV_COLOR_16_SWAP 1
     tft.writePixels((uint16_t*)color_p, w * h, true, true);
-    delayMicroseconds(2); // Гарантирует завершение передачи последнего байта до подъема CS
     tft.endWrite();
 
-    lv_disp_flush_ready(disp_drv);
-}
-
-// Вспомогательная функция применения тревожного мигания карточки при варнинге
-static void applyCardWarning(lv_obj_t* card, bool isAlarm, bool blinkPhase) {
-    if (!card) return;
-    uintptr_t targetState = (isAlarm && blinkPhase) ? 1 : 0;
-    uintptr_t currentState = (uintptr_t)lv_obj_get_user_data(card);
-    if (targetState == currentState) {
-        return; // Стиль уже применен, исключаем паразитную инвалидацию LVGL и SPI трафик
+    if (g_capture) {
+        // Формат: '@' x1 y1 w h (uint16 LE) + пиксели RGB565 big-endian
+        uint8_t hdr[9] = { '@',
+                           (uint8_t)area->x1, (uint8_t)(area->x1 >> 8), (uint8_t)area->y1, (uint8_t)(area->y1 >> 8),
+                           (uint8_t)w, (uint8_t)(w >> 8), (uint8_t)h, (uint8_t)(h >> 8) };
+        serialWriteAll(hdr, sizeof(hdr));
+        serialWriteAll((const uint8_t*)color_p, w * h * 2);
     }
-    lv_obj_set_user_data(card, (void*)targetState);
 
-    if (targetState == 1) {
-        // Резкая, стробоскопическая заливка всей карточки ярко-красным цветом ///M Red
-        lv_obj_set_style_bg_color(card, lv_color_make(220, 20, 30), 0);
-        lv_obj_set_style_border_color(card, lv_color_make(255, 255, 255), 0);
-        lv_obj_set_style_border_width(card, 3, 0);
-    } else {
-        lv_obj_set_style_bg_color(card, COLOR_LV_CARD_BG, 0);
-        lv_obj_set_style_border_color(card, COLOR_LV_CARD_BORDER, 0);
-        lv_obj_set_style_border_width(card, 1, 0);
-    }
+    lv_disp_flush_ready(drv);
 }
 
-// Вспомогательная функция создания разделительной линии
-static lv_obj_t* createDivider(lv_obj_t* parent, int16_t x, int16_t y, int16_t w, int16_t h = 1) {
-    lv_obj_t* div = lv_obj_create(parent);
-    lv_obj_set_pos(div, x, y);
-    lv_obj_set_size(div, w, h);
-    lv_obj_set_style_bg_color(div, COLOR_LV_DARK_GRAY, 0);
-    lv_obj_set_style_border_width(div, 0, 0);
-    lv_obj_set_style_radius(div, 0, 0);
-    lv_obj_clear_flag(div, LV_OBJ_FLAG_SCROLLABLE);
-    return div;
+void UiEngine::captureScreen() {
+#if ARDUINO_USB_CDC_ON_BOOT
+    Serial.setTxTimeoutMs(500);
+#endif
+    Serial.flush();
+    Serial.print("\nCAPSTART\n");
+    g_capture = true;
+    lv_obj_invalidate(lv_scr_act());
+    lv_obj_invalidate(lv_layer_top());
+    lv_refr_now(NULL);
+    g_capture = false;
+    Serial.print("\nCAPEND\n");
+    Serial.flush();
+#if ARDUINO_USB_CDC_ON_BOOT
+    Serial.setTxTimeoutMs(10);
+#endif
 }
 
-// Вспомогательная функция создания спортивной плитки (карточки)
-static lv_obj_t* createCardTile(lv_obj_t* parent, int16_t x, int16_t y, int16_t w, int16_t h) {
-    lv_obj_t* tile = lv_obj_create(parent);
-    lv_obj_set_pos(tile, x, y);
-    lv_obj_set_size(tile, w, h);
-    lv_obj_set_style_bg_color(tile, COLOR_LV_CARD_BG, 0);
-    lv_obj_set_style_border_color(tile, COLOR_LV_CARD_BORDER, 0);
-    lv_obj_set_style_border_width(tile, 1, 0);
-    lv_obj_set_style_radius(tile, 8, 0);
-    lv_obj_set_style_pad_all(tile, 4, 0);
-    lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
-    return tile;
-}
-
-// Вспомогательная функция создания индикатора MegaSquirt в верхнем левом углу
-static lv_obj_t* createMs2StatusLabel(lv_obj_t* parent) {
-    lv_obj_t* lbl = lv_label_create(parent);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lbl, COLOR_LV_OFFLINE, 0);
-    lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, 12, 10);
-    lv_label_set_text(lbl, LV_SYMBOL_CLOSE " MS2");
-    return lbl;
-}
-
-// Вспомогательная функция создания индикатора спутников в правом верхнем углу
-static lv_obj_t* createGpsCornerLabel(lv_obj_t* parent) {
-    lv_obj_t* lbl = lv_label_create(parent);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_18, 0);
-    lv_obj_set_style_text_color(lbl, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl, LV_ALIGN_TOP_RIGHT, -12, 10);
-    lv_label_set_text(lbl, LV_SYMBOL_GPS " --");
-    return lbl;
-}
-
-// Обновление состояния индикатора MegaSquirt (только при фактической смене статуса)
-static void updateMs2StatusWidget(lv_obj_t* lbl, bool online) {
-    if (!lbl) return;
-    uintptr_t targetState = online ? 2 : 1;
-    uintptr_t currentState = (uintptr_t)lv_obj_get_user_data(lbl);
-    if (currentState == targetState) return;
-    lv_obj_set_user_data(lbl, (void*)targetState);
-
-    if (online) {
-        lv_obj_set_style_text_color(lbl, COLOR_LV_ONLINE, 0);
-        lv_label_set_text(lbl, LV_SYMBOL_OK " MS2");
-    } else {
-        lv_obj_set_style_text_color(lbl, COLOR_LV_OFFLINE, 0);
-        lv_label_set_text(lbl, LV_SYMBOL_CLOSE " MS2");
-    }
-}
-
+// =============================================================================
+// ИНИЦИАЛИЗАЦИЯ
+// =============================================================================
 void UiEngine::init() {
     lv_init();
 
-    // Инициализация дисплейного буфера LVGL
     lv_disp_draw_buf_init(&draw_buf, buf_1, NULL, 320 * LV_BUF_LINES);
 
-    // Регистрация драйвера дисплея
     lv_disp_drv_init(&disp_drv);
     disp_drv.hor_res = 320;
     disp_drv.ver_res = 240;
@@ -211,467 +262,248 @@ void UiEngine::init() {
     disp_drv.draw_buf = &draw_buf;
     lv_disp_drv_register(&disp_drv);
 
-    // Загрузка сохраненного типа датчика для полноэкранного прибора
     loadGaugeFromNvs();
 
-    // Создание всех экранов интерфейса
     createScreenClock();
     createScreenTrip();
     createScreenTelem();
     createScreenMPerf();
     createScreenGauge();
     createScreenSettings();
+    createTopLayer();
 
-    // Загрузка стартового экрана часов
     currentScreen = ScreenId::CLASSIC_CLOCK;
-    lv_scr_load(scr_clock);
-    lv_obj_invalidate(scr_clock);
-    lastTickMillis = millis();
+    lv_scr_load(screens[(int)ScreenId::CLASSIC_CLOCK]);
+    updateTopLayer();
+    updateGaugeScreen(true);
+    lastDataMs = millis();
 }
 
 // -----------------------------------------------------------------------------
-// ЭКРАН 1: ЧАСЫ И ТЕЛЕМЕТРИЯ (CLASSIC CLOCK) - СПОРТИВНЫЕ ПЛИТКИ
+// Верхняя строка статуса и индикатор страниц - общие для всех экранов
 // -----------------------------------------------------------------------------
-void UiEngine::createScreenClock() {
-    scr_clock = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(scr_clock, COLOR_LV_BLACK, 0);
-    lv_obj_clear_flag(scr_clock, LV_OBJ_FLAG_SCROLLABLE);
+void UiEngine::createTopLayer() {
+    lv_obj_t* top = lv_layer_top();
 
-    // Статус MegaSquirt 2 в верхнем левом углу
-    lbl_ms2_status_1 = createMs2StatusLabel(scr_clock);
+    ms2Dot = makeBox(top, 12, 9, 8, 8, C_SURFACE2, LV_RADIUS_CIRCLE);
+    ms2Text.obj = makeLabel(top, &lv_font_montserrat_12, C_DIM, "MS2");
+    lv_obj_set_pos(ms2Text.obj, 25, 5);
 
-    // Индикатор спутников в правом верхнем углу
-    lbl_gps_sats_1 = createGpsCornerLabel(scr_clock);
+    titleLbl.obj = makeLabel(top, &lv_font_montserrat_12, C_TEXT, "");
+    lv_obj_set_style_text_letter_space(titleLbl.obj, 2, 0);
+    lv_obj_align(titleLbl.obj, LV_ALIGN_TOP_MID, 0, 5);
 
-    // Крупные белые часы (нативный сглаженный 4bpp шрифт 51 px)
-    lbl_clock = lv_label_create(scr_clock);
-    lv_obj_set_style_text_font(lbl_clock, &lv_font_clock_70, 0);
-    lv_obj_set_style_text_color(lbl_clock, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_clock, LV_ALIGN_TOP_MID, 0, 36);
-    lv_label_set_text(lbl_clock, "12:34");
+    gpsLbl.obj = makeLabel(top, &lv_font_montserrat_12, C_DIM, LV_SYMBOL_GPS " --");
+    lv_obj_align(gpsLbl.obj, LV_ALIGN_TOP_RIGHT, -12, 5);
 
-    // ПЛИТКА 1: BOOST (x=10, y=118, w=94, h=110)
-    card_boost_1 = createCardTile(scr_clock, 10, 118, 94, 110);
-    lv_obj_t* t_boost = lv_label_create(card_boost_1);
-    lv_obj_set_style_text_font(t_boost, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_boost, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_boost, LV_ALIGN_TOP_MID, 0, 4);
-    lv_label_set_text(t_boost, "BOOST");
-
-    lbl_boost_val = lv_label_create(card_boost_1);
-    lv_obj_set_style_text_font(lbl_boost_val, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_boost_val, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_boost_val, LV_ALIGN_CENTER, 0, 2);
-    lv_label_set_text(lbl_boost_val, "0.00");
-
-    lbl_boost_sub = lv_label_create(card_boost_1);
-    lv_obj_set_style_text_font(lbl_boost_sub, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_boost_sub, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_boost_sub, LV_ALIGN_BOTTOM_MID, 0, -4);
-    lv_label_set_text(lbl_boost_sub, "bar");
-
-    // ПЛИТКА 2: COOLANT (x=113, y=118, w=94, h=110)
-    card_clt_1 = createCardTile(scr_clock, 113, 118, 94, 110);
-    lv_obj_t* t_clt = lv_label_create(card_clt_1);
-    lv_obj_set_style_text_font(t_clt, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_clt, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_clt, LV_ALIGN_TOP_MID, 0, 4);
-    lv_label_set_text(t_clt, "COOLANT");
-
-    lbl_clt_val = lv_label_create(card_clt_1);
-    lv_obj_set_style_text_font(lbl_clt_val, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_clt_val, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_clt_val, LV_ALIGN_CENTER, 0, 2);
-    lv_label_set_text(lbl_clt_val, "20");
-
-    lbl_clt_sub = lv_label_create(card_clt_1);
-    lv_obj_set_style_text_font(lbl_clt_sub, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_clt_sub, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_clt_sub, LV_ALIGN_BOTTOM_MID, 0, -4);
-    lv_label_set_text(lbl_clt_sub, "\xC2\xB0 C");
-
-    // ПЛИТКА 3: AFR (x=216, y=118, w=94, h=110)
-    card_afr_1 = createCardTile(scr_clock, 216, 118, 94, 110);
-    lv_obj_t* t_afr = lv_label_create(card_afr_1);
-    lv_obj_set_style_text_font(t_afr, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_afr, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_afr, LV_ALIGN_TOP_MID, 0, 4);
-    lv_label_set_text(t_afr, "AFR");
-
-    lbl_afr_val = lv_label_create(card_afr_1);
-    lv_obj_set_style_text_font(lbl_afr_val, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_afr_val, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_afr_val, LV_ALIGN_CENTER, 0, 2);
-    lv_label_set_text(lbl_afr_val, "--.-");
-
-    lbl_afr_sub = lv_label_create(card_afr_1);
-    lv_obj_set_style_text_font(lbl_afr_sub, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_afr_sub, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_afr_sub, LV_ALIGN_BOTTOM_MID, 0, -4);
-    lv_label_set_text(lbl_afr_sub, "");
-}
-
-// -----------------------------------------------------------------------------
-// ЭКРАН 2: БОРТОВОЙ КОМПЬЮТЕР И РАСХОД (OBC TRIP & FUEL) - 3 СПОРТИВНЫЕ ПЛИТКИ
-// -----------------------------------------------------------------------------
-void UiEngine::createScreenTrip() {
-    scr_trip = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(scr_trip, COLOR_LV_BLACK, 0);
-    lv_obj_clear_flag(scr_trip, LV_OBJ_FLAG_SCROLLABLE);
-
-    lbl_ms2_status_2 = createMs2StatusLabel(scr_trip);
-    lbl_gps_sats_2 = createGpsCornerLabel(scr_trip);
-
-    // Верхняя плитка скорости и мгновенного расхода (разделена на 2 независимые зоны)
-    lv_obj_t* top_card = createCardTile(scr_trip, 10, 32, 300, 66);
-
-    // Левая зона: Спидометр
-    lbl_trip_spd = lv_label_create(top_card);
-    lv_obj_set_style_text_font(lbl_trip_spd, &lv_font_clock_70, 0);
-    lv_obj_set_style_text_color(lbl_trip_spd, COLOR_LV_WHITE, 0);
-    lv_obj_set_pos(lbl_trip_spd, 10, 4);
-    lv_label_set_text(lbl_trip_spd, "0");
-
-    lv_obj_t* t_kmh = lv_label_create(top_card);
-    lv_obj_set_style_text_font(t_kmh, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_kmh, COLOR_LV_SILVER, 0);
-    lv_obj_set_pos(t_kmh, 118, 14);
-    lv_label_set_text(t_kmh, "KM/H");
-
-    lbl_trip_fix = lv_label_create(top_card);
-    lv_obj_set_style_text_font(lbl_trip_fix, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_trip_fix, COLOR_LV_MID_GRAY, 0);
-    lv_obj_set_pos(lbl_trip_fix, 118, 36);
-    lv_label_set_text(lbl_trip_fix, "NO FIX");
-
-    // Тонкий вертикальный разделитель между спидометром и расходомером
-    createDivider(top_card, 160, 10, 1, 46);
-
-    // Правая зона: Мгновенный расход топлива
-    lbl_trip_inst = lv_label_create(top_card);
-    lv_obj_set_style_text_font(lbl_trip_inst, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_trip_inst, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_trip_inst, LV_ALIGN_RIGHT_MID, -12, 0);
-    lv_label_set_text(lbl_trip_inst, "0.0 L/H");
-
-    // 3 Спортивные плитки снизу (симметрично экрану часов: 94 x 128 px)
-    // Плитка 1: TRIP DISTANCE (слева) - единица (KM) в заголовке, число строго по центру
-    card_trip_dist = createCardTile(scr_trip, 10, 104, 94, 128);
-    lv_obj_t* t_dist = lv_label_create(card_trip_dist);
-    lv_obj_set_style_text_font(t_dist, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_dist, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_dist, LV_ALIGN_TOP_MID, 0, 4);
-    lv_label_set_text(t_dist, "TRIP (KM)");
-
-    lbl_trip_dist = lv_label_create(card_trip_dist);
-    lv_obj_set_style_text_font(lbl_trip_dist, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_trip_dist, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_trip_dist, LV_ALIGN_CENTER, 0, 0);
-    lv_label_set_text(lbl_trip_dist, "0.0");
-
-    lbl_trip_reset_hint = lv_label_create(card_trip_dist);
-    lv_obj_set_style_text_font(lbl_trip_reset_hint, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_trip_reset_hint, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_trip_reset_hint, LV_ALIGN_BOTTOM_MID, 0, -4);
-    lv_label_set_text(lbl_trip_reset_hint, "[HOLD RST]");
-
-    // Плитка 2: AVG CONSUMPTION (по центру)
-    card_trip_avg = createCardTile(scr_trip, 113, 104, 94, 128);
-    lv_obj_t* t_avg = lv_label_create(card_trip_avg);
-    lv_obj_set_style_text_font(t_avg, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_avg, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_avg, LV_ALIGN_TOP_MID, 0, 4);
-    lv_label_set_text(t_avg, "AVG CONS");
-
-    lbl_trip_avg = lv_label_create(card_trip_avg);
-    lv_obj_set_style_text_font(lbl_trip_avg, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_trip_avg, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_trip_avg, LV_ALIGN_CENTER, 0, 0);
-    lv_label_set_text(lbl_trip_avg, "---");
-
-    lv_obj_t* sub_avg = lv_label_create(card_trip_avg);
-    lv_obj_set_style_text_font(sub_avg, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(sub_avg, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(sub_avg, LV_ALIGN_BOTTOM_MID, 0, -4);
-    lv_label_set_text(sub_avg, "L / 100KM");
-
-    // Плитка 3: TRIP FUEL (справа)
-    card_trip_fuel = createCardTile(scr_trip, 216, 104, 94, 128);
-    lv_obj_t* t_fuel = lv_label_create(card_trip_fuel);
-    lv_obj_set_style_text_font(t_fuel, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_fuel, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_fuel, LV_ALIGN_TOP_MID, 0, 4);
-    lv_label_set_text(t_fuel, "TRIP FUEL");
-
-    lbl_trip_fuel = lv_label_create(card_trip_fuel);
-    lv_obj_set_style_text_font(lbl_trip_fuel, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_trip_fuel, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_trip_fuel, LV_ALIGN_CENTER, 0, 0);
-    lv_label_set_text(lbl_trip_fuel, "0.0");
-
-    lv_obj_t* sub_fuel = lv_label_create(card_trip_fuel);
-    lv_obj_set_style_text_font(sub_fuel, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(sub_fuel, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(sub_fuel, LV_ALIGN_BOTTOM_MID, 0, -4);
-    lv_label_set_text(sub_fuel, "LITERS");
-}
-
-void UiEngine::notifyTripReset() {
-    if (lbl_trip_reset_hint) {
-        lv_label_set_text(lbl_trip_reset_hint, "RESET OK!");
-        lv_obj_set_style_text_color(lbl_trip_reset_hint, COLOR_LV_ONLINE, 0);
-        tripResetNoticeMillis = millis();
+    // Точки-индикаторы экранов внизу по центру
+    const int n = (int)ScreenId::COUNT - 1;
+    const int gap = 10;
+    int x0 = 160 - ((n - 1) * gap) / 2 - 2;
+    for (int i = 0; i < n; i++) {
+        pageDots[i] = makeBox(top, x0 + i * gap, 231, 4, 4, C_SURFACE2, LV_RADIUS_CIRCLE);
     }
 }
 
 // -----------------------------------------------------------------------------
-// ЭКРАН 3: ТЕЛЕМЕТРИЯ МОТОРА (OBC TELEMETRY) - СПОРТИВНЫЕ ПЛИТКИ
+// ЭКРАН 1: ЧАСЫ
+// -----------------------------------------------------------------------------
+void UiEngine::createScreenClock() {
+    lv_obj_t* s = makeScreen();
+    screens[(int)ScreenId::CLASSIC_CLOCK] = s;
+
+    // Строка часов: контейнер по ширине содержимого, выровнен по центру
+    lv_obj_t* row = lv_obj_create(s);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(row, 2, 0);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(row, LV_ALIGN_TOP_MID, 0, 38);
+
+    clockH.obj = makeLabel(row, &lv_font_clock_70, C_TEXT, "12");
+    clockColon = makeLabel(row, &lv_font_clock_70, C_ACCENT, ":");
+    clockM.obj = makeLabel(row, &lv_font_clock_70, C_TEXT, "34");
+    colonShown = -1;
+
+    makeTile(clkBoost, s, 8, 108, 96, 114, "BOOST", "", 34, false, -100, 150);
+    makeTile(clkClt,   s, 112, 108, 96, 114, "WATER", "\xC2\xB0" "C", 34, false, 40, 120);
+    makeTile(clkAfr,   s, 216, 108, 96, 114, "AFR", "", 34, false, 100, 200);
+    // На главном экране значения крупнее
+    lv_obj_set_style_text_font(clkBoost.value.obj, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_font(clkClt.value.obj, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_font(clkAfr.value.obj, &lv_font_montserrat_32, 0);
+}
+
+// -----------------------------------------------------------------------------
+// ЭКРАН 2: ТРИП И РАСХОД
+// -----------------------------------------------------------------------------
+void UiEngine::createScreenTrip() {
+    lv_obj_t* s = makeScreen();
+    screens[(int)ScreenId::OBC_TRIP_FUEL] = s;
+
+    lv_obj_t* top = makeBox(s, 8, 28, 304, 82, C_SURFACE, 10);
+
+    tripSpeed.obj = makeLabel(top, &lv_font_clock_70, C_TEXT, "0");
+    lv_obj_set_pos(tripSpeed.obj, 12, 8);
+    lv_obj_t* kmh = makeCaption(top, "KM/H");
+    lv_obj_set_pos(kmh, 14, 62);
+    tripFix.obj = makeLabel(top, &lv_font_montserrat_12, C_DIM, "");
+    lv_obj_set_pos(tripFix.obj, 60, 62);
+
+    lv_obj_t* div = makeBox(top, 158, 12, 1, 58, C_SURFACE2, 0);
+    (void)div;
+
+    lv_obj_t* instCap = makeCaption(top, "INSTANT");
+    lv_obj_set_pos(instCap, 172, 8);
+    tripInstUnit.obj = makeLabel(top, &lv_font_montserrat_12, C_DIM, "L/H");
+    lv_obj_align(tripInstUnit.obj, LV_ALIGN_TOP_RIGHT, -10, 8);
+    tripInst.obj = makeLabel(top, &lv_font_telemetry_24, C_TEXT, "0.0");
+    lv_obj_set_pos(tripInst.obj, 172, 28);
+    tripInstBar = makeBar(top, 172, 66, 122, 5, 0, 300);
+
+    makeTile(tripDist, s, 8, 118, 96, 104, "TRIP", "KM", 36, true, 0, 0);
+    makeTile(tripAvg,  s, 112, 118, 96, 104, "AVG", "L/100", 36, true, 0, 0);
+    makeTile(tripFuel, s, 216, 118, 96, 104, "FUEL", "L", 36, true, 0, 0);
+    tripDist.sub.set("HOLD: RESET");
+    tripAvg.sub.set("AVERAGE");
+    tripFuel.sub.set("USED");
+}
+
+void UiEngine::notifyTripReset() {
+    tripDist.sub.set("RESET OK");
+    if (tripDist.sub.obj) lv_obj_set_style_text_color(tripDist.sub.obj, C_OK, 0);
+    tripResetNoticeMs = millis();
+}
+
+// -----------------------------------------------------------------------------
+// ЭКРАН 3: ТЕЛЕМЕТРИЯ МОТОРА
 // -----------------------------------------------------------------------------
 void UiEngine::createScreenTelem() {
-    scr_telem = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(scr_telem, COLOR_LV_BLACK, 0);
-    lv_obj_clear_flag(scr_telem, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* s = makeScreen();
+    screens[(int)ScreenId::OBC_TELEMETRY] = s;
 
-    lbl_ms2_status_3 = createMs2StatusLabel(scr_telem);
-    lbl_gps_sats_3 = createGpsCornerLabel(scr_telem);
+    makeTile(engVolt, s, 8, 28, 148, 74, "BATTERY", "V", 24, true, 0, 0);
+    makeTile(engClt,  s, 164, 28, 148, 74, "WATER", "\xC2\xB0" "C", 24, true, 0, 0);
+    makeTile(engAfr,  s, 8, 108, 148, 74, "AFR", "", 24, true, 0, 0);
+    makeTile(engTps,  s, 164, 108, 148, 74, "THROTTLE", "%", 24, true, 0, 0);
 
-    // 1. АКБ (верх-лево)
-    lv_obj_t* c_v = createCardTile(scr_telem, 10, 32, 145, 66);
-    lv_obj_t* t_v = lv_label_create(c_v);
-    lv_obj_set_style_text_font(t_v, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_v, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_v, LV_ALIGN_TOP_LEFT, 6, 2);
-    lv_label_set_text(t_v, "BATTERY");
-
-    lbl_telem_volt = lv_label_create(c_v);
-    lv_obj_set_style_text_font(lbl_telem_volt, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_telem_volt, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_telem_volt, LV_ALIGN_LEFT_MID, 6, 2);
-    lv_label_set_text(lbl_telem_volt, "12.4V");
-
-    lbl_telem_volt_sub = lv_label_create(c_v);
-    lv_obj_set_style_text_font(lbl_telem_volt_sub, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_telem_volt_sub, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_telem_volt_sub, LV_ALIGN_BOTTOM_LEFT, 6, -2);
-    lv_label_set_text(lbl_telem_volt_sub, "IGNITION ON");
-
-    // 2. ОЖ (верх-право)
-    card_telem_clt = createCardTile(scr_telem, 165, 32, 145, 66);
-    lv_obj_t* t_c = lv_label_create(card_telem_clt);
-    lv_obj_set_style_text_font(t_c, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_c, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_c, LV_ALIGN_TOP_LEFT, 6, 2);
-    lv_label_set_text(t_c, "COOLANT");
-
-    lbl_telem_clt = lv_label_create(card_telem_clt);
-    lv_obj_set_style_text_font(lbl_telem_clt, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_telem_clt, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_telem_clt, LV_ALIGN_LEFT_MID, 6, 2);
-    lv_label_set_text(lbl_telem_clt, "+25 C");
-
-    lbl_telem_clt_sub = lv_label_create(card_telem_clt);
-    lv_obj_set_style_text_font(lbl_telem_clt_sub, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_telem_clt_sub, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_telem_clt_sub, LV_ALIGN_BOTTOM_LEFT, 6, -2);
-    lv_label_set_text(lbl_telem_clt_sub, "INTAKE: +20 C");
-
-    // 3. AFR (низ-лево)
-    card_telem_afr = createCardTile(scr_telem, 10, 104, 145, 66);
-    lv_obj_t* t_a = lv_label_create(card_telem_afr);
-    lv_obj_set_style_text_font(t_a, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_a, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_a, LV_ALIGN_TOP_LEFT, 6, 2);
-    lv_label_set_text(t_a, "AIR / FUEL (AFR)");
-
-    lbl_telem_afr = lv_label_create(card_telem_afr);
-    lv_obj_set_style_text_font(lbl_telem_afr, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_telem_afr, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_telem_afr, LV_ALIGN_LEFT_MID, 6, 2);
-    lv_label_set_text(lbl_telem_afr, "--.-");
-
-    lbl_telem_afr_sub = lv_label_create(card_telem_afr);
-    lv_obj_set_style_text_font(lbl_telem_afr_sub, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_telem_afr_sub, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_telem_afr_sub, LV_ALIGN_BOTTOM_LEFT, 6, -2);
-    lv_label_set_text(lbl_telem_afr_sub, "TARGET: --.-");
-
-    // 4. Дроссель TPS (низ-право)
-    lv_obj_t* c_t = createCardTile(scr_telem, 165, 104, 145, 66);
-    lv_obj_t* t_t = lv_label_create(c_t);
-    lv_obj_set_style_text_font(t_t, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_t, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_t, LV_ALIGN_TOP_LEFT, 6, 2);
-    lv_label_set_text(t_t, "THROTTLE (TPS)");
-
-    lbl_telem_tps = lv_label_create(c_t);
-    lv_obj_set_style_text_font(lbl_telem_tps, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_telem_tps, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_telem_tps, LV_ALIGN_LEFT_MID, 6, 2);
-    lv_label_set_text(lbl_telem_tps, "0%");
-
-    lbl_telem_tps_sub = lv_label_create(c_t);
-    lv_obj_set_style_text_font(lbl_telem_tps_sub, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_telem_tps_sub, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_telem_tps_sub, LV_ALIGN_BOTTOM_LEFT, 6, -2);
-    lv_label_set_text(lbl_telem_tps_sub, "MAP: 100 kPa");
-
-    // Нижняя шкала наддува
-    card_telem_boost = createCardTile(scr_telem, 10, 176, 300, 56);
-    lbl_telem_boost_txt = lv_label_create(card_telem_boost);
-    lv_obj_set_style_text_font(lbl_telem_boost_txt, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_telem_boost_txt, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_telem_boost_txt, LV_ALIGN_TOP_LEFT, 8, 2);
-    lv_label_set_text(lbl_telem_boost_txt, "BOOST: 0.00 Bar (100 kPa)");
-
-    bar_telem_boost = lv_bar_create(card_telem_boost);
-    lv_obj_set_size(bar_telem_boost, 280, 16);
-    lv_obj_align(bar_telem_boost, LV_ALIGN_BOTTOM_MID, 0, -4);
-    lv_bar_set_range(bar_telem_boost, 0, 230); // -0.8 .. +1.5 bar
-    lv_bar_set_value(bar_telem_boost, 80, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(bar_telem_boost, COLOR_LV_DARK_GRAY, 0);
-    lv_obj_set_style_bg_color(bar_telem_boost, COLOR_LV_WHITE, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(bar_telem_boost, 3, 0);
-    lv_obj_set_style_radius(bar_telem_boost, 3, LV_PART_INDICATOR);
+    // Наддув: подпись и значение в строку, шкала на всю ширину с меткой нуля
+    engBoost.box = makeBox(s, 8, 188, 304, 36, C_SURFACE, 10);
+    lv_obj_t* cap = makeCaption(engBoost.box, "BOOST");
+    lv_obj_set_pos(cap, 10, 4);
+    engBoost.value.obj = makeLabel(engBoost.box, &lv_font_montserrat_12, C_TEXT, "--");
+    lv_obj_align(engBoost.value.obj, LV_ALIGN_TOP_RIGHT, -10, 4);
+    engBoost.bar = makeBar(engBoost.box, 10, 24, 284, 6, -100, 150);
+    // Метка 0 бар (атмосфера) на шкале -1.0..+1.5
+    makeBox(engBoost.box, 10 + (284 * 100) / 250, 21, 2, 12, C_DIM, 0);
 }
 
 // -----------------------------------------------------------------------------
-// ЭКРАН 4: ///M PERFORMANCE & ТАХОМЕТР - СПОРТИВНЫЕ ПЛИТКИ
+// ЭКРАН 4: ///M ТАХОМЕТР
 // -----------------------------------------------------------------------------
 void UiEngine::createScreenMPerf() {
-    scr_m_perf = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(scr_m_perf, COLOR_LV_BLACK, 0);
-    lv_obj_clear_flag(scr_m_perf, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* s = makeScreen();
+    screens[(int)ScreenId::M_PERFORMANCE] = s;
 
-    lbl_ms2_status_4 = createMs2StatusLabel(scr_m_perf);
-    lbl_gps_sats_4 = createGpsCornerLabel(scr_m_perf);
+    // Шифт-лайт: 16 сегментов (синие -> янтарные -> красные)
+    const int segW = 17, segGap = 2;
+    int x0 = (320 - (SHIFT_SEGMENTS * segW + (SHIFT_SEGMENTS - 1) * segGap)) / 2;
+    for (int i = 0; i < SHIFT_SEGMENTS; i++) {
+        shiftSeg[i] = makeBox(s, x0 + i * (segW + segGap), 30, segW, 12, C_SURFACE2, 3);
+    }
 
-    // Верхняя карточка тахометра
-    lv_obj_t* c_tacho = createCardTile(scr_m_perf, 10, 32, 300, 116);
+    mRpm.obj = makeLabel(s, &lv_font_clock_96, C_TEXT, "0");
+    lv_obj_align(mRpm.obj, LV_ALIGN_TOP_RIGHT, -70, 52);
+    lv_obj_t* rpmCap = makeCaption(s, "RPM");
+    lv_obj_align(rpmCap, LV_ALIGN_TOP_RIGHT, -20, 106);
+    lv_obj_t* stripe = makeBox(s, 262, 96, 38, 4, C_M_BLUE, 2);
+    (void)stripe;
 
-    lbl_m_rpm = lv_label_create(c_tacho);
-    lv_obj_set_style_text_font(lbl_m_rpm, &lv_font_clock_70, 0);
-    lv_obj_set_style_text_color(lbl_m_rpm, COLOR_LV_WHITE, 0);
-    lv_obj_set_pos(lbl_m_rpm, 12, 6);
-    lv_label_set_text(lbl_m_rpm, "0");
-
-    lv_obj_t* t_rpm = lv_label_create(c_tacho);
-    lv_obj_set_style_text_font(t_rpm, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(t_rpm, COLOR_LV_SILVER, 0);
-    lv_obj_set_pos(t_rpm, 186, 28);
-    lv_label_set_text(t_rpm, "RPM");
-
-    // Прогрессивная полоса тахометра
-    bar_m_shift = lv_bar_create(c_tacho);
-    lv_obj_set_size(bar_m_shift, 276, 22);
-    lv_obj_set_pos(bar_m_shift, 10, 68);
-    lv_bar_set_range(bar_m_shift, 0, 7500);
-    lv_bar_set_value(bar_m_shift, 0, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(bar_m_shift, COLOR_LV_DARK_GRAY, 0);
-    lv_obj_set_style_bg_color(bar_m_shift, COLOR_LV_WHITE, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(bar_m_shift, 3, 0);
-    lv_obj_set_style_radius(bar_m_shift, 3, LV_PART_INDICATOR);
-
-    // Метки шкалы
-    lv_obj_t* t_scale = lv_label_create(c_tacho);
-    lv_obj_set_style_text_font(t_scale, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_scale, COLOR_LV_SILVER, 0);
-    lv_obj_set_pos(t_scale, 12, 94);
-    lv_label_set_text(t_scale, "0         2k        4k        6k       7.5k");
-
-    // Статус ожидания CAN
-    lbl_m_offline = lv_label_create(c_tacho);
-    lv_obj_set_style_text_font(lbl_m_offline, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lbl_m_offline, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_m_offline, LV_ALIGN_CENTER, 0, -10);
-    lv_label_set_text(lbl_m_offline, "WAITING MS2 CAN...");
-    lv_obj_add_flag(lbl_m_offline, LV_OBJ_FLAG_HIDDEN);
-
-    // Нижние 2 плитки
-    // 1. Наддув
-    card_m_boost = createCardTile(scr_m_perf, 10, 154, 145, 78);
-    lv_obj_t* t_mb = lv_label_create(card_m_boost);
-    lv_obj_set_style_text_font(t_mb, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_mb, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_mb, LV_ALIGN_TOP_LEFT, 6, 2);
-    lv_label_set_text(t_mb, "BOOST");
-
-    lbl_m_boost = lv_label_create(card_m_boost);
-    lv_obj_set_style_text_font(lbl_m_boost, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_m_boost, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_m_boost, LV_ALIGN_BOTTOM_LEFT, 6, -6);
-    lv_label_set_text(lbl_m_boost, "0.00b");
-
-    // 2. УОЗ
-    lv_obj_t* c_ma = createCardTile(scr_m_perf, 165, 154, 145, 78);
-    lv_obj_t* t_ma = lv_label_create(c_ma);
-    lv_obj_set_style_text_font(t_ma, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(t_ma, COLOR_LV_SILVER, 0);
-    lv_obj_align(t_ma, LV_ALIGN_TOP_LEFT, 6, 2);
-    lv_label_set_text(t_ma, "IGN ADVANCE");
-
-    lbl_m_adv = lv_label_create(c_ma);
-    lv_obj_set_style_text_font(lbl_m_adv, &lv_font_telemetry_24, 0);
-    lv_obj_set_style_text_color(lbl_m_adv, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_m_adv, LV_ALIGN_BOTTOM_LEFT, 6, -6);
-    lv_label_set_text(lbl_m_adv, "10.0*");
+    makeTile(mBoost, s, 8, 150, 148, 72, "BOOST", "BAR", 26, false, -100, 150);
+    makeTile(mAdv,   s, 164, 150, 148, 72, "IGNITION", "\xC2\xB0" "BTDC", 26, false, 0, 45);
 }
 
 // -----------------------------------------------------------------------------
-// ЭКРАН 5: НАСТРОЙКИ И ИНФО (SETTINGS & INFO) - СПОРТИВНЫЕ ПЛИТКИ
+// ЭКРАН 5: ПОЛНОЭКРАННЫЙ ПРИБОР (дуга 270°)
 // -----------------------------------------------------------------------------
+void UiEngine::createScreenGauge() {
+    lv_obj_t* s = makeScreen();
+    screens[(int)ScreenId::SINGLE_GAUGE] = s;
+
+    gaugeArc = lv_arc_create(s);
+    lv_obj_set_size(gaugeArc, 188, 188);
+    lv_obj_align(gaugeArc, LV_ALIGN_TOP_MID, 0, 30);
+    lv_arc_set_rotation(gaugeArc, 135);
+    lv_arc_set_bg_angles(gaugeArc, 0, 270);
+    lv_arc_set_range(gaugeArc, 0, 1000);
+    lv_arc_set_value(gaugeArc, 0);
+    lv_obj_remove_style(gaugeArc, NULL, LV_PART_KNOB);
+    lv_obj_clear_flag(gaugeArc, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_pad_all(gaugeArc, 0, 0);
+    lv_obj_set_style_arc_width(gaugeArc, 12, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(gaugeArc, C_SURFACE2, LV_PART_MAIN);
+    lv_obj_set_style_arc_rounded(gaugeArc, true, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(gaugeArc, 12, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(gaugeArc, C_ACCENT, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_rounded(gaugeArc, true, LV_PART_INDICATOR);
+
+    gaugeVal.obj = makeLabel(s, &lv_font_clock_70, C_TEXT, "0");
+    lv_obj_align(gaugeVal.obj, LV_ALIGN_TOP_MID, 0, 96);
+    gaugeUnit.obj = makeLabel(s, &lv_font_montserrat_14, C_DIM, "");
+    lv_obj_set_style_text_letter_space(gaugeUnit.obj, 1, 0);
+    lv_obj_align(gaugeUnit.obj, LV_ALIGN_TOP_MID, 0, 152);
+
+    gaugeMin.obj = makeLabel(s, &lv_font_montserrat_12, C_DIM, "");
+    lv_obj_align(gaugeMin.obj, LV_ALIGN_TOP_MID, -52, 196);
+    gaugeMax.obj = makeLabel(s, &lv_font_montserrat_12, C_DIM, "");
+    lv_obj_align(gaugeMax.obj, LV_ALIGN_TOP_MID, 52, 196);
+
+    gaugePeak.obj = makeLabel(s, &lv_font_montserrat_12, C_ACCENT, "");
+    lv_obj_set_pos(gaugePeak.obj, 10, 208);
+    gaugeLimit.obj = makeLabel(s, &lv_font_montserrat_12, C_DIM, "");
+    lv_obj_align(gaugeLimit.obj, LV_ALIGN_TOP_RIGHT, -10, 208);
+}
+
+// -----------------------------------------------------------------------------
+// ЭКРАН 6: СИСТЕМА
+// -----------------------------------------------------------------------------
+static void makeInfoRow(CachedLabel& value, lv_obj_t* parent, int y, const char* caption) {
+    lv_obj_t* row = makeBox(parent, 8, y, 304, 44, C_SURFACE, 10);
+    lv_obj_t* cap = makeCaption(row, caption);
+    lv_obj_align(cap, LV_ALIGN_LEFT_MID, 12, 0);
+    value.obj = makeLabel(row, &lv_font_montserrat_14, C_TEXT, "");
+    lv_obj_align(value.obj, LV_ALIGN_RIGHT_MID, -12, 0);
+}
+
 void UiEngine::createScreenSettings() {
-    scr_settings = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(scr_settings, COLOR_LV_BLACK, 0);
-    lv_obj_clear_flag(scr_settings, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* s = makeScreen();
+    screens[(int)ScreenId::SETTINGS_INFO] = s;
 
-    // Секция 1: Bluetooth
-    lv_obj_t* c1 = createCardTile(scr_settings, 10, 14, 300, 48);
-    lbl_set_ble = lv_label_create(c1);
-    lv_obj_set_style_text_font(lbl_set_ble, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lbl_set_ble, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_set_ble, LV_ALIGN_LEFT_MID, 8, 0);
-    lv_label_set_text(lbl_set_ble, LV_SYMBOL_BLUETOOTH " BLE: BMW_OBC_E36 (READY)");
-
-    // Секция 2: CAN-шина MegaSquirt 2
-    lv_obj_t* c2 = createCardTile(scr_settings, 10, 68, 300, 48);
-    lbl_set_can = lv_label_create(c2);
-    lv_obj_set_style_text_font(lbl_set_can, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lbl_set_can, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_set_can, LV_ALIGN_LEFT_MID, 8, 0);
-    lv_label_set_text(lbl_set_can, "CAN-BUS: 500 kbps (OFFLINE)");
-
-    // Секция 3: GPS модуль
-    lv_obj_t* c3 = createCardTile(scr_settings, 10, 122, 300, 48);
-    lbl_set_gps = lv_label_create(c3);
-    lv_obj_set_style_text_font(lbl_set_gps, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lbl_set_gps, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_set_gps, LV_ALIGN_LEFT_MID, 8, 0);
-    lv_label_set_text(lbl_set_gps, LV_SYMBOL_GPS " GPS: NEO-7M (NO FIX)");
-
-    // Секция 4: Версия прошивки
-    lv_obj_t* c4 = createCardTile(scr_settings, 10, 176, 300, 48);
-    lbl_set_sys = lv_label_create(c4);
-    lv_obj_set_style_text_font(lbl_set_sys, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_set_sys, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_set_sys, LV_ALIGN_LEFT_MID, 8, 0);
-    lv_label_set_text(lbl_set_sys, "BMW E36 OBC v2.4 (LVGL 8.3) - ESP32-S3");
+    makeInfoRow(infoCan, s, 28, "CAN MS2");
+    makeInfoRow(infoGps, s, 78, "GPS");
+    makeInfoRow(infoBle, s, 128, "BLE OTA");
+    makeInfoRow(infoFw,  s, 178, "FIRMWARE");
 }
 
+// =============================================================================
+// ЗАСТАВКА И НАВИГАЦИЯ
+// =============================================================================
 void UiEngine::showBootSplash(const char* subtitle) {
     Display.setBrightness(DEFAULT_BRIGHTNESS);
     Adafruit_ST7789& tft = Display.getTft();
     tft.fillScreen(0x0000);
 
-    // Лаконичная заставка Megasquirt 2
     tft.setFont(&FreeSansBoldOblique12pt7b);
     tft.setTextColor(0xFFFF);
     tft.setCursor(68, 105);
     tft.print("Megasquirt 2");
-    tft.drawFastHLine(48, 120, 224, 0x4208);
+    tft.drawFastHLine(48, 120, 224, 0xFC43); // янтарная линия
     tft.setFont();
 
     if (subtitle && subtitle[0]) {
-        tft.setTextColor(0xAD55); // серый цвет
+        tft.setTextColor(0x8430);
         tft.setTextSize(1);
         int16_t x = 160 - (strlen(subtitle) * 6) / 2;
         if (x < 10) x = 10;
@@ -680,7 +512,6 @@ void UiEngine::showBootSplash(const char* subtitle) {
     }
 
     delay(900);
-    // Не стираем экран в черный цвет: первый кадр LVGL мгновенно заменит заставку
 }
 
 void UiEngine::nextScreen() {
@@ -693,484 +524,425 @@ void UiEngine::nextScreen() {
 }
 
 void UiEngine::setScreen(ScreenId screen) {
-    if (currentScreen != screen) {
-        currentScreen = screen;
-        lv_obj_t* target = nullptr;
-        switch (screen) {
-            case ScreenId::CLASSIC_CLOCK:  target = scr_clock; break;
-            case ScreenId::OBC_TRIP_FUEL:  target = scr_trip; break;
-            case ScreenId::OBC_TELEMETRY:  target = scr_telem; break;
-            case ScreenId::M_PERFORMANCE:  target = scr_m_perf; break;
-            case ScreenId::SINGLE_GAUGE:   target = scr_gauge; break;
-            case ScreenId::SETTINGS_INFO:  target = scr_settings; break;
-            default: target = scr_clock; break;
-        }
-        if (target) {
-            lv_scr_load(target);
-            lv_obj_invalidate(target);
-        }
+    if ((int)screen <= 0 || screen >= ScreenId::COUNT || screen == currentScreen) return;
+
+    // Направление сдвига: вперед - влево, назад (в т.ч. с последнего на первый) - вправо
+    bool forward = (int)screen > (int)currentScreen;
+    currentScreen = screen;
+
+    // Свежие данные до начала анимации, чтобы не было скачка значений в конце сдвига
+    switch (screen) {
+        case ScreenId::CLASSIC_CLOCK:  updateClockScreen(); break;
+        case ScreenId::OBC_TRIP_FUEL:  updateTripScreen(); break;
+        case ScreenId::OBC_TELEMETRY:  updateTelemScreen(); break;
+        case ScreenId::M_PERFORMANCE:  updateMPerfScreen(); break;
+        case ScreenId::SINGLE_GAUGE:   updateGaugeScreen(true); break;
+        case ScreenId::SETTINGS_INFO:  updateSettingsScreen(); break;
+        default: break;
     }
+    updateTopLayer();
+
+    lv_scr_load_anim(screens[(int)screen],
+                     forward ? LV_SCR_LOAD_ANIM_MOVE_LEFT : LV_SCR_LOAD_ANIM_MOVE_RIGHT,
+                     SCREEN_ANIM_MS, 0, false);
 }
 
-// -----------------------------------------------------------------------------
-// Главный метод периодического обновления UI
-// -----------------------------------------------------------------------------
+// =============================================================================
+// ГЛАВНЫЙ ЦИКЛ UI
+// =============================================================================
 void UiEngine::update() {
     unsigned long now = millis();
-    lv_tick_inc(now - lastTickMillis);
-    lastTickMillis = now;
 
-    // Гарантированная принудительная перерисовка первых 5 кадров после старта loop()
-    // Это исключает пропуск первой отрисовки интерфейса при аппаратном сбросе платы
-    static uint8_t initialForceRefresh = 5;
-    if (initialForceRefresh > 0) {
-        initialForceRefresh--;
-        lv_obj_invalidate(lv_scr_act());
+    if (now - lastDataMs >= DATA_PERIOD_MS) {
+        float dt = (float)(now - lastDataMs) / 1000.0f;
+        if (dt > 0.5f) dt = 0.5f;
+        lastDataMs = now;
+
+        stepSmoothing(dt);
+        updateTopLayer();
+
+        switch (currentScreen) {
+            case ScreenId::CLASSIC_CLOCK:  updateClockScreen(); break;
+            case ScreenId::OBC_TRIP_FUEL:  updateTripScreen(); break;
+            case ScreenId::OBC_TELEMETRY:  updateTelemScreen(); break;
+            case ScreenId::M_PERFORMANCE:  updateMPerfScreen(); break;
+            case ScreenId::SINGLE_GAUGE:   updateGaugeScreen(); break;
+            case ScreenId::SETTINGS_INFO:  updateSettingsScreen(); break;
+            default: break;
+        }
     }
 
-    // Мигание двоеточия раз в секунду
-    if (now - lastColonBlinkMillis >= 500) {
-        colonState = !colonState;
-        lastColonBlinkMillis = now;
-    }
-
-    // Обновляем данные для текущего активного экрана
-    switch (currentScreen) {
-        case ScreenId::CLASSIC_CLOCK:
-            updateClockScreen();
-            break;
-        case ScreenId::OBC_TRIP_FUEL:
-            updateTripScreen();
-            break;
-        case ScreenId::OBC_TELEMETRY:
-            updateTelemScreen();
-            break;
-        case ScreenId::M_PERFORMANCE:
-            updateMPerfScreen();
-            break;
-        case ScreenId::SINGLE_GAUGE:
-            updateGaugeScreen();
-            break;
-        case ScreenId::SETTINGS_INFO:
-            updateSettingsScreen();
-            break;
-        default:
-            break;
-    }
-
-    // Запуск цикла отрисовки и событий LVGL
+    // Отрисовка: LVGL сам ограничивает частоту кадров (LV_DISP_DEF_REFR_PERIOD)
     lv_timer_handler();
 }
 
+// Сглаживание: быстрые параметры (обороты, наддув) - короткая постоянная времени,
+// медленные (температуры, напряжение) - длинная, чтобы цифры не "дрожали"
+void UiEngine::stepSmoothing(float dt) {
+    const SensorData& s = Sensors.getData();
+    const TripData& tr = Trip.getData();
+    bool on = s.ms2Online;
+
+    sRpm.step(on ? (float)s.ms2.rpm : 0.0f, dt, 0.08f);
+    sBoost.step(on ? s.ms2.boost_bar : 0.0f, dt, 0.10f);
+    sAfr.step(on ? s.ms2.afr : 14.7f, dt, 0.15f);
+    sTps.step(on ? s.ms2.tps_pct : 0.0f, dt, 0.08f);
+    sAdv.step(on ? s.ms2.advance_deg : 0.0f, dt, 0.15f);
+    sClt.step(on ? s.ms2.clt_c : 0.0f, dt, 0.8f);
+    sMat.step(on ? s.ms2.mat_c : 0.0f, dt, 0.8f);
+    sVolt.step(s.batteryVoltage, dt, 0.5f);
+    sSpeed.step(tr.current_speed_kmh, dt, 0.25f);
+    sInst.step(tr.instant_consumption, dt, 0.4f);
+
+    // При появлении/пропадании связи - без "наезда" значений из нуля
+    static bool lastOn = false;
+    if (on != lastOn) {
+        lastOn = on;
+        if (on) {
+            sRpm.snap(s.ms2.rpm); sBoost.snap(s.ms2.boost_bar); sAfr.snap(s.ms2.afr);
+            sClt.snap(s.ms2.clt_c); sMat.snap(s.ms2.mat_c); sTps.snap(s.ms2.tps_pct);
+            sAdv.snap(s.ms2.advance_deg);
+        }
+    }
+}
+
+void UiEngine::updateTopLayer() {
+    const SensorData& sens = Sensors.getData();
+    const GpsData& gps = Gps.getData();
+
+    static int lastMs2 = -1;
+    int ms2 = sens.ms2Online ? 1 : 0;
+    if (ms2 != lastMs2) {
+        lastMs2 = ms2;
+        lv_obj_set_style_bg_color(ms2Dot, ms2 ? C_OK : C_SURFACE2, 0);
+        lv_obj_set_style_text_color(ms2Text.obj, ms2 ? C_TEXT : C_DIM, 0);
+    }
+    ms2Text.set(CanBus.isDemo() ? "MS2 DEMO" : "MS2");
+
+    static int lastFix = -1;
+    if ((gps.hasFix ? 1 : 0) != lastFix) {
+        lastFix = gps.hasFix ? 1 : 0;
+        lv_obj_set_style_text_color(gpsLbl.obj, gps.hasFix ? C_TEXT : C_DIM, 0);
+    }
+    if (gps.satellites > 0) {
+        gpsLbl.setf(LV_SYMBOL_GPS " %d", gps.satellites);
+    } else {
+        gpsLbl.set(LV_SYMBOL_GPS " --");
+    }
+    lv_obj_align(gpsLbl.obj, LV_ALIGN_TOP_RIGHT, -12, 5);
+
+    // Заголовок экрана
+    static const char* gaugeNames[] = { "BOOST", "WATER", "AFR", "FUEL", "SPEED", "INTAKE", "TACHO" };
+    const char* title = "";
+    char buf[32];
+    switch (currentScreen) {
+        case ScreenId::CLASSIC_CLOCK:  title = Time.getTime().dayOfWeekStrEn; break;
+        case ScreenId::OBC_TRIP_FUEL:  title = "TRIP"; break;
+        case ScreenId::OBC_TELEMETRY:  title = "ENGINE"; break;
+        case ScreenId::M_PERFORMANCE:  title = "///M"; break;
+        case ScreenId::SINGLE_GAUGE:
+            snprintf(buf, sizeof(buf), "%s  %d/7", gaugeNames[(int)currentGauge], (int)currentGauge + 1);
+            title = buf;
+            break;
+        case ScreenId::SETTINGS_INFO:  title = "SYSTEM"; break;
+        default: break;
+    }
+    titleLbl.set(title);
+    lv_obj_align(titleLbl.obj, LV_ALIGN_TOP_MID, 0, 5);
+
+    // Индикатор текущего экрана: активная точка вытягивается в янтарную "таблетку"
+    static int lastPage = -1;
+    int page = (int)currentScreen - 1;
+    if (page != lastPage) {
+        const int n = (int)ScreenId::COUNT - 1;
+        const int gap = 10;
+        int x0 = 160 - ((n - 1) * gap) / 2 - 2;
+        for (int i = 0; i < n; i++) {
+            bool act = (i == page);
+            lv_obj_set_size(pageDots[i], act ? 12 : 4, 4);
+            lv_obj_set_x(pageDots[i], x0 + i * gap - (act ? 4 : 0));
+            lv_obj_set_style_bg_color(pageDots[i], act ? C_ACCENT : C_SURFACE2, 0);
+        }
+        lastPage = page;
+    }
+}
+
+// -----------------------------------------------------------------------------
 void UiEngine::updateClockScreen() {
     const TimeData& td = Time.getTime();
     const SensorData& sens = Sensors.getData();
-    const GpsData& gps = Gps.getData();
     const WarningState& warn = Warnings.getState();
+    bool on = sens.ms2Online;
 
-    // Применение тревожного мигания карточек при аварийных ситуациях
-    applyCardWarning(card_boost_1, warn.boostAlarm, warn.blinkPhase);
-    applyCardWarning(card_clt_1, warn.cltAlarm, warn.blinkPhase);
-    applyCardWarning(card_afr_1, warn.afrAlarm, warn.blinkPhase);
-
-    // Статус MegaSquirt 2 в верхнем левом углу
-    updateMs2StatusWidget(lbl_ms2_status_1, sens.ms2Online);
-
-    // 1. Часы с мигающим двоеточием (обновление ТОЛЬКО при смене минуты или двоеточия)
-    static int lastH = -1, lastM = -1;
-    static bool lastColon = false;
-    if (lastH != td.hour || lastM != td.minute || lastColon != colonState) {
-        lastH = td.hour;
-        lastM = td.minute;
-        lastColon = colonState;
-        if (colonState) {
-            lv_label_set_text_fmt(lbl_clock, "%02d:%02d", td.hour, td.minute);
-        } else {
-            lv_label_set_text_fmt(lbl_clock, "%02d %02d", td.hour, td.minute);
-        }
+    // Двоеточие мигает раз в секунду: меняется только прозрачность, ширина строки постоянна
+    clockH.setf("%02d", td.hour);
+    clockM.setf("%02d", td.minute);
+    int8_t colon = (millis() % 1000) < 500 ? 1 : 0;
+    if (colon != colonShown) {
+        colonShown = colon;
+        lv_obj_set_style_text_opa(clockColon, colon ? LV_OPA_COVER : LV_OPA_20, 0);
     }
 
-    // 2. Индикатор спутников (обновление ТОЛЬКО при смене числа спутников или фикса)
-    static int lastSats = -99;
-    static bool lastFix = false;
-    if (lastSats != gps.satellites || lastFix != gps.hasFix) {
-        lastSats = gps.satellites;
-        lastFix = gps.hasFix;
-        if (gps.hasFix) {
-            lv_obj_set_style_text_color(lbl_gps_sats_1, COLOR_LV_WHITE, 0);
-            lv_label_set_text_fmt(lbl_gps_sats_1, LV_SYMBOL_GPS " %d", gps.satellites);
-        } else {
-            lv_obj_set_style_text_color(lbl_gps_sats_1, COLOR_LV_MID_GRAY, 0);
-            if (gps.satellites > 0) {
-                lv_label_set_text_fmt(lbl_gps_sats_1, LV_SYMBOL_GPS " %d", gps.satellites);
-            } else {
-                lv_label_set_text(lbl_gps_sats_1, LV_SYMBOL_GPS " --");
-            }
-        }
-    }
+    clkBoost.setAlarm(warn.boostAlarm, warn.blinkPhase);
+    clkClt.setAlarm(warn.cltAlarm, warn.blinkPhase);
+    clkAfr.setAlarm(warn.afrAlarm, warn.blinkPhase);
 
-    // 3. Плитки: BOOST, COOLANT, AFR (обновление ТОЛЬКО при изменении значений)
-    static float lastBoost = -999.0f;
-    static int lastClt = -999;
-    static float lastAfr = -999.0f;
-    static bool lastOnline = false;
-    static bool lastBoostWarn = false, lastCltWarn = false, lastAfrWarn = false;
-
-    if (sens.ms2Online) {
-        if (!lastOnline || fabs(sens.ms2.boost_bar - lastBoost) >= 0.02f || warn.boostAlarm != lastBoostWarn) {
-            lastBoost = sens.ms2.boost_bar;
-            lastBoostWarn = warn.boostAlarm;
-            lv_label_set_text_fmt(lbl_boost_val, "%.2f", sens.ms2.boost_bar);
-            if (warn.boostAlarm) {
-                lv_obj_set_style_text_color(lbl_boost_sub, COLOR_LV_M_RED, 0);
-                lv_label_set_text(lbl_boost_sub, "OVERBOOST!");
-            } else {
-                lv_obj_set_style_text_color(lbl_boost_sub, COLOR_LV_MID_GRAY, 0);
-                lv_label_set_text(lbl_boost_sub, "bar");
-            }
-        }
-
-        int curClt = (int)round(sens.ms2.clt_c);
-        if (!lastOnline || curClt != lastClt || warn.cltAlarm != lastCltWarn) {
-            lastClt = curClt;
-            lastCltWarn = warn.cltAlarm;
-            lv_label_set_text_fmt(lbl_clt_val, "%d", curClt);
-            if (warn.cltAlarm) {
-                lv_obj_set_style_text_color(lbl_clt_sub, COLOR_LV_M_RED, 0);
-                lv_label_set_text(lbl_clt_sub, "OVERHEAT!");
-            } else {
-                lv_obj_set_style_text_color(lbl_clt_sub, COLOR_LV_MID_GRAY, 0);
-                lv_label_set_text(lbl_clt_sub, "\xC2\xB0 C");
-            }
-        }
-
-        if (!lastOnline || fabs(sens.ms2.afr - lastAfr) >= 0.1f || warn.afrAlarm != lastAfrWarn) {
-            lastAfr = sens.ms2.afr;
-            lastAfrWarn = warn.afrAlarm;
-            lv_label_set_text_fmt(lbl_afr_val, "%.1f", sens.ms2.afr);
-            if (warn.afrAlarm) {
-                lv_obj_set_style_text_color(lbl_afr_sub, COLOR_LV_M_RED, 0);
-                lv_label_set_text(lbl_afr_sub, (sens.ms2.afr >= Warnings.getSettings().afr_lean_max) ? "LEAN!" : "RICH!");
-            } else {
-                lv_label_set_text(lbl_afr_sub, "");
-            }
-        }
-        lastOnline = true;
+    if (on) {
+        // Без знака "+": крупный шрифт должен уместиться в плитку (минус остается)
+        clkBoost.value.setf("%.2f", sBoost.value);
+        clkClt.value.setf("%d", (int)lroundf(sClt.value));
+        clkAfr.value.setf("%.1f", sAfr.value);
+        clkBoost.setBar(clampI(lroundf(sBoost.value * 100), -100, 150));
+        clkClt.setBar(clampI(lroundf(sClt.value), 40, 120));
+        clkAfr.setBar(clampI(lroundf(sAfr.value * 10), 100, 200));
     } else {
-        if (lastOnline || lastClt == -999) {
-            lastOnline = false;
-            lastBoost = 0.0f;
-            lastClt = -998; // Нет данных ЭБУ (не совпадает с маркером первого запуска -999)
-            lastAfr = -1.0f;
-
-            lv_label_set_text(lbl_boost_val, "-.--");
-            lv_obj_set_style_text_color(lbl_boost_sub, COLOR_LV_MID_GRAY, 0);
-            lv_label_set_text(lbl_boost_sub, "bar");
-
-            lv_label_set_text(lbl_clt_val, "--");
-            lv_obj_set_style_text_color(lbl_clt_sub, COLOR_LV_MID_GRAY, 0);
-            lv_label_set_text(lbl_clt_sub, "\xC2\xB0 C");
-
-            lv_label_set_text(lbl_afr_val, "--.-");
-            lv_label_set_text(lbl_afr_sub, "");
-        }
+        clkBoost.value.set("-.--");
+        clkClt.value.set("--");
+        clkAfr.value.set("--.-");
+        clkBoost.setBar(-100);
+        clkClt.setBar(40);
+        clkAfr.setBar(100);
     }
 }
 
 void UiEngine::updateTripScreen() {
     const TripData& trip = Trip.getData();
-    const SensorData& sens = Sensors.getData();
     const GpsData& gps = Gps.getData();
 
-    // Статус MegaSquirt 2 в верхнем левом углу
-    updateMs2StatusWidget(lbl_ms2_status_2, sens.ms2Online);
+    tripSpeed.setf("%d", (int)clampI(lroundf(sSpeed.value), 0, 999));
+    tripFix.set(gps.hasFix ? "" : "NO GPS FIX");
 
-    // Скорость по GPS (число без паразитных пробелов)
-    static int lastSpd = -999;
-    int spd = (int)trip.current_speed_kmh;
-    if (spd > 999) spd = 999;
-    if (spd != lastSpd) {
-        lastSpd = spd;
-        lv_label_set_text_fmt(lbl_trip_spd, "%d", spd);
-    }
-
-    // Статус фиксации GPS и спутники
-    static bool lastGpsFix = false;
-    static int lastGpsSats = -999;
-    if (gps.hasFix != lastGpsFix || gps.satellites != lastGpsSats) {
-        lastGpsFix = gps.hasFix;
-        lastGpsSats = gps.satellites;
-        if (gps.hasFix) {
-            lv_label_set_text(lbl_trip_fix, "");
-            lv_obj_set_style_text_color(lbl_gps_sats_2, COLOR_LV_WHITE, 0);
-            lv_label_set_text_fmt(lbl_gps_sats_2, LV_SYMBOL_GPS " %d", gps.satellites);
-        } else {
-            lv_label_set_text(lbl_trip_fix, "NO FIX");
-            lv_obj_set_style_text_color(lbl_gps_sats_2, COLOR_LV_MID_GRAY, 0);
-            if (gps.satellites > 0) {
-                lv_label_set_text_fmt(lbl_gps_sats_2, LV_SYMBOL_GPS " %d", gps.satellites);
-            } else {
-                lv_label_set_text(lbl_gps_sats_2, LV_SYMBOL_GPS " --");
-            }
-        }
+    tripInst.setf("%.1f", sInst.value);
+    tripInstUnit.set(trip.isLitersPerHour ? "L/H" : "L/100");
+    lv_obj_align(tripInstUnit.obj, LV_ALIGN_TOP_RIGHT, -10, 8);
+    int32_t ib = clampI(lroundf(sInst.value * 10), 0, 300);
+    if (ib != tripInstBarLast) {
+        tripInstBarLast = ib;
+        lv_bar_set_value(tripInstBar, ib, LV_ANIM_OFF);
     }
 
-    // Мгновенный расход (компактный и читаемый формат: L/H на месте или L/100 в движении)
-    static float lastInst = -999.0f;
-    static bool lastIsLph = false;
-    if (fabs(trip.instant_consumption - lastInst) >= 0.1f || trip.isLitersPerHour != lastIsLph) {
-        lastInst = trip.instant_consumption;
-        lastIsLph = trip.isLitersPerHour;
-        char instBuf[32];
-        snprintf(instBuf, sizeof(instBuf), "%.1f %s", trip.instant_consumption, trip.isLitersPerHour ? "L/H" : "L/100");
-        lv_label_set_text(lbl_trip_inst, instBuf);
+    if (trip.trip_distance_km >= 1000.0) {
+        tripDist.value.setf("%.0f", trip.trip_distance_km);
+    } else {
+        tripDist.value.setf("%.1f", trip.trip_distance_km);
     }
+    if (trip.trip_distance_km >= 0.1) {
+        tripAvg.value.setf("%.1f", trip.avg_consumption_l_100km);
+    } else {
+        tripAvg.value.set("--.-");
+    }
+    tripFuel.value.setf("%.1f", trip.trip_fuel_liters);
 
-    // 3 Спортивные плитки: числа выводятся строго без паразитных суффиксов, единицы в подписях
-    static float lastDist = -999.0f;
-    static float lastAvg = -999.0f;
-    static float lastFuel = -999.0f;
-    if (fabs(trip.trip_distance_km - lastDist) >= 0.1f) {
-        lastDist = trip.trip_distance_km;
-        if (trip.trip_distance_km >= 1000.0f) {
-            lv_label_set_text_fmt(lbl_trip_dist, "%.0f", trip.trip_distance_km);
-        } else {
-            lv_label_set_text_fmt(lbl_trip_dist, "%.1f", trip.trip_distance_km);
-        }
-    }
-    if (fabs(trip.avg_consumption_l_100km - lastAvg) >= 0.1f) {
-        lastAvg = trip.avg_consumption_l_100km;
-        if (trip.trip_distance_km >= 0.1f) {
-            lv_label_set_text_fmt(lbl_trip_avg, "%.1f", trip.avg_consumption_l_100km);
-        } else {
-            lv_label_set_text(lbl_trip_avg, "---");
-        }
-    }
-    if (fabs((float)trip.trip_fuel_liters - lastFuel) >= 0.1f) {
-        lastFuel = (float)trip.trip_fuel_liters;
-        lv_label_set_text_fmt(lbl_trip_fuel, "%.1f", trip.trip_fuel_liters);
-    }
-
-    // Автоматический возврат подсказки [HOLD RST] через 2.5 сек после сброса
-    if (tripResetNoticeMillis > 0 && (millis() - tripResetNoticeMillis >= 2500)) {
-        tripResetNoticeMillis = 0;
-        if (lbl_trip_reset_hint) {
-            lv_label_set_text(lbl_trip_reset_hint, "[HOLD RST]");
-            lv_obj_set_style_text_color(lbl_trip_reset_hint, COLOR_LV_MID_GRAY, 0);
-        }
+    if (tripResetNoticeMs > 0 && (millis() - tripResetNoticeMs >= 2500)) {
+        tripResetNoticeMs = 0;
+        tripDist.sub.set("HOLD: RESET");
+        lv_obj_set_style_text_color(tripDist.sub.obj, C_DIM, 0);
     }
 }
 
 void UiEngine::updateTelemScreen() {
     const SensorData& sens = Sensors.getData();
-    const GpsData& gps = Gps.getData();
     const WarningState& warn = Warnings.getState();
+    bool on = sens.ms2Online;
 
-    // Применение тревожного мигания карточек
-    applyCardWarning(card_telem_clt, warn.cltAlarm, warn.blinkPhase);
-    applyCardWarning(card_telem_afr, warn.afrAlarm, warn.blinkPhase);
-    applyCardWarning(card_telem_boost, warn.boostAlarm, warn.blinkPhase);
+    engClt.setAlarm(warn.cltAlarm, warn.blinkPhase);
+    engAfr.setAlarm(warn.afrAlarm, warn.blinkPhase);
+    engBoost.setAlarm(warn.boostAlarm, warn.blinkPhase);
 
-    // Статус MegaSquirt 2 в верхнем левом углу
-    updateMs2StatusWidget(lbl_ms2_status_3, sens.ms2Online);
-
-    // Спутники
-    static bool lastFix = false;
-    static int lastSats = -999;
-    if (gps.hasFix != lastFix || gps.satellites != lastSats) {
-        lastFix = gps.hasFix;
-        lastSats = gps.satellites;
-        if (gps.hasFix) {
-            lv_obj_set_style_text_color(lbl_gps_sats_3, COLOR_LV_WHITE, 0);
-            lv_label_set_text_fmt(lbl_gps_sats_3, LV_SYMBOL_GPS " %d", gps.satellites);
-        } else {
-            lv_obj_set_style_text_color(lbl_gps_sats_3, COLOR_LV_MID_GRAY, 0);
-            if (gps.satellites > 0) {
-                lv_label_set_text_fmt(lbl_gps_sats_3, LV_SYMBOL_GPS " %d", gps.satellites);
-            } else {
-                lv_label_set_text(lbl_gps_sats_3, LV_SYMBOL_GPS " --");
-            }
-        }
-    }
-
-    // 1. АКБ
-    static float lastVolt = -999.0f;
-    static VoltageStatus lastVoltSt = (VoltageStatus)-1;
-    static float lastCrank = -999.0f;
-    if (fabs(sens.batteryVoltage - lastVolt) >= 0.05f || sens.voltStatus != lastVoltSt || fabs(sens.minCrankVoltage - lastCrank) >= 0.1f) {
-        lastVolt = sens.batteryVoltage;
-        lastVoltSt = sens.voltStatus;
-        lastCrank = sens.minCrankVoltage;
-        if (sens.batteryVoltage < 1.0f) {
-            // Источник напряжения недоступен (MS2 offline, АЦП не подключен)
-            lv_label_set_text(lbl_telem_volt, "--.--V");
-            lv_obj_set_style_text_color(lbl_telem_volt_sub, COLOR_LV_SILVER, 0);
-            lv_label_set_text(lbl_telem_volt_sub, "NO DATA");
-        } else {
-            lv_label_set_text_fmt(lbl_telem_volt, "%.2fV", sens.batteryVoltage);
-        }
-
-        if (sens.batteryVoltage < 1.0f) {
-            // Подпись уже выставлена выше
-        } else if (sens.voltStatus == VoltageStatus::VOLT_CRITICAL_LOW) {
-            lv_obj_set_style_text_color(lbl_telem_volt_sub, COLOR_LV_M_RED, 0);
-            lv_label_set_text(lbl_telem_volt_sub, "LOW BATTERY!");
-        } else if (sens.voltStatus == VoltageStatus::VOLT_NORMAL_RUNNING) {
-            lv_obj_set_style_text_color(lbl_telem_volt_sub, COLOR_LV_SILVER, 0);
-            lv_label_set_text(lbl_telem_volt_sub, "ALT: CHARGING");
-        } else {
-            lv_obj_set_style_text_color(lbl_telem_volt_sub, COLOR_LV_SILVER, 0);
-            lv_label_set_text_fmt(lbl_telem_volt_sub, "CRK: %.1fV", sens.minCrankVoltage);
-        }
-    }
-
-    // 2. ОЖ и впуск
-    static float lastClt = -999.0f;
-    static float lastMat = -999.0f;
-    static bool lastMs2Online = false;
-    if (sens.ms2Online) {
-        if (!lastMs2Online || fabs(sens.ms2.clt_c - lastClt) >= 1.0f || fabs(sens.ms2.mat_c - lastMat) >= 1.0f) {
-            lastClt = sens.ms2.clt_c;
-            lastMat = sens.ms2.mat_c;
-            lv_label_set_text_fmt(lbl_telem_clt, "%+.0f C", sens.ms2.clt_c);
-            lv_label_set_text_fmt(lbl_telem_clt_sub, "INTAKE: %+.0f C", sens.ms2.mat_c);
-        }
+    // АКБ
+    if (sens.batteryVoltage < 1.0f) {
+        engVolt.value.set("--.-");
+        engVolt.sub.set("NO DATA");
     } else {
-        // Нет связи с ЭБУ - показываем прочерки вместо устаревших/условных значений
-        if (lastMs2Online || lastClt == -999.0f) {
-            lastClt = -998.0f;
-            lastMat = -998.0f;
-            lv_label_set_text(lbl_telem_clt, "-- C");
-            lv_label_set_text(lbl_telem_clt_sub, "INTAKE: -- C");
-        }
+        engVolt.value.setf("%.1f", sVolt.value);
+        if (sens.voltStatus == VoltageStatus::VOLT_CRITICAL_LOW) engVolt.sub.set("LOW BATTERY");
+        else if (sens.voltStatus == VoltageStatus::VOLT_NORMAL_RUNNING) engVolt.sub.set("CHARGING");
+        else if (sens.voltStatus == VoltageStatus::VOLT_OVERCHARGE) engVolt.sub.set("OVERCHARGE");
+        else engVolt.sub.setf("CRANK MIN %.1f", sens.minCrankVoltage);
     }
 
-    // 3. AFR
-    static float lastAfr = -999.0f;
-    static float lastAfrTgt = -999.0f;
-    if (sens.ms2Online) {
-        if (!lastMs2Online || fabs(sens.ms2.afr - lastAfr) >= 0.1f || fabs(sens.ms2.afr_target - lastAfrTgt) >= 0.1f) {
-            lastAfr = sens.ms2.afr;
-            lastAfrTgt = sens.ms2.afr_target;
-            lv_label_set_text_fmt(lbl_telem_afr, "%.1f", sens.ms2.afr);
-            lv_label_set_text_fmt(lbl_telem_afr_sub, "TARGET: %.1f", sens.ms2.afr_target);
-        }
+    if (on) {
+        engClt.value.setf("%d", (int)lroundf(sClt.value));
+        engClt.sub.setf("INTAKE %d\xC2\xB0" "C", (int)lroundf(sMat.value));
+        engAfr.value.setf("%.1f", sAfr.value);
+        engAfr.sub.setf("TARGET %.1f", sens.ms2.afr_target);
+        engTps.value.setf("%d", (int)clampI(lroundf(sTps.value), 0, 100));
+        engTps.sub.setf("MAP %d KPA", (int)lroundf(sens.ms2.map_kpa));
+        engBoost.value.setf("%+.2f BAR", sBoost.value);
+        engBoost.setBar(clampI(lroundf(sBoost.value * 100), -100, 150));
     } else {
-        if (lastMs2Online || lastAfr == -999.0f) {
-            lastAfr = -999.0f;
-            lv_label_set_text(lbl_telem_afr, "--.-");
-            lv_label_set_text(lbl_telem_afr_sub, "NO CAN DATA");
-        }
+        engClt.value.set("--");
+        engClt.sub.set("NO CAN DATA");
+        engAfr.value.set("--.-");
+        engAfr.sub.set("NO CAN DATA");
+        engTps.value.set("--");
+        engTps.sub.set("NO CAN DATA");
+        engBoost.value.set("--");
+        engBoost.setBar(-100);
     }
-
-    // 4. Дроссель TPS и MAP
-    static float lastTps = -999.0f;
-    static float lastMap = -999.0f;
-    if (sens.ms2Online) {
-        if (!lastMs2Online || fabs(sens.ms2.tps_pct - lastTps) >= 1.0f || fabs(sens.ms2.map_kpa - lastMap) >= 2.0f) {
-            lastTps = sens.ms2.tps_pct;
-            lastMap = sens.ms2.map_kpa;
-            lv_label_set_text_fmt(lbl_telem_tps, "%.0f%%", sens.ms2.tps_pct);
-            lv_label_set_text_fmt(lbl_telem_tps_sub, "MAP: %.0f kPa", sens.ms2.map_kpa);
-        }
-    } else {
-        if (lastMs2Online || lastTps == -999.0f) {
-            lastTps = -999.0f;
-            lv_label_set_text(lbl_telem_tps, "--%%");
-            lv_label_set_text(lbl_telem_tps_sub, "TPS NO CAN");
-        }
-    }
-
-    // 5. Нижняя полоса наддува
-    static float lastBoostVal = -999.0f;
-    static int lastMapKpa = -999;
-    float boostVal = sens.ms2Online ? sens.ms2.boost_bar : 0.0f;
-    int mapKpa = sens.ms2Online ? (int)sens.ms2.map_kpa : 100;
-    if (!lastMs2Online || fabs(boostVal - lastBoostVal) >= 0.02f || mapKpa != lastMapKpa) {
-        lastBoostVal = boostVal;
-        lastMapKpa = mapKpa;
-        lv_label_set_text_fmt(lbl_telem_boost_txt, "BOOST: %+.2f Bar (%d kPa)", boostVal, mapKpa);
-
-        int barVal = map(constrain((int)(boostVal * 100), -80, 150), -80, 150, 0, 230);
-        lv_bar_set_value(bar_telem_boost, barVal, LV_ANIM_OFF);
-    }
-    lastMs2Online = sens.ms2Online;
+    lv_obj_align(engBoost.value.obj, LV_ALIGN_TOP_RIGHT, -10, 4);
 }
 
 void UiEngine::updateMPerfScreen() {
     const SensorData& sens = Sensors.getData();
-    const GpsData& gps = Gps.getData();
     const WarningState& warn = Warnings.getState();
+    bool on = sens.ms2Online;
 
-    // Применение тревожного мигания карточки наддува
-    applyCardWarning(card_m_boost, warn.boostAlarm, warn.blinkPhase);
+    mBoost.setAlarm(warn.boostAlarm, warn.blinkPhase);
 
-    // Статус MegaSquirt 2 в верхнем левом углу
-    updateMs2StatusWidget(lbl_ms2_status_4, sens.ms2Online);
+    int rpm = on ? (int)lroundf(sRpm.value) : 0;
+    // Цифры оборотов округляем до 10, чтобы младший разряд не мельтешил
+    mRpm.setf("%d", on ? (rpm / 10) * 10 : 0);
+    lv_obj_align(mRpm.obj, LV_ALIGN_TOP_RIGHT, -70, 52);
 
-    // Спутники
-    static bool lastFix = false;
-    static int lastSats = -999;
-    if (gps.hasFix != lastFix || gps.satellites != lastSats) {
-        lastFix = gps.hasFix;
-        lastSats = gps.satellites;
-        if (gps.hasFix) {
-            lv_obj_set_style_text_color(lbl_gps_sats_4, COLOR_LV_WHITE, 0);
-            lv_label_set_text_fmt(lbl_gps_sats_4, LV_SYMBOL_GPS " %d", gps.satellites);
-        } else {
-            lv_obj_set_style_text_color(lbl_gps_sats_4, COLOR_LV_MID_GRAY, 0);
-            if (gps.satellites > 0) {
-                lv_label_set_text_fmt(lbl_gps_sats_4, LV_SYMBOL_GPS " %d", gps.satellites);
+    // Шифт-лайт: сегменты загораются от 1000 до 6600 об/мин, на отсечке мигают все красным
+    const int startRpm = 1000, fullRpm = 6600;
+    int lit = (rpm <= startRpm) ? 0 : ((rpm - startRpm) * SHIFT_SEGMENTS) / (fullRpm - startRpm) + 1;
+    lit = clampI(lit, 0, SHIFT_SEGMENTS);
+    bool flash = on && rpm >= fullRpm && ((millis() / 80) % 2 == 0);
+    if (lit != shiftLit || flash != shiftFlash) {
+        shiftLit = lit;
+        shiftFlash = flash;
+        for (int i = 0; i < SHIFT_SEGMENTS; i++) {
+            lv_color_t c;
+            if (rpm >= fullRpm) {
+                c = flash ? C_M_RED : C_SURFACE2;
+            } else if (i < lit) {
+                c = (i < 9) ? C_M_LBLUE : (i < 13 ? C_ACCENT : C_M_RED);
             } else {
-                lv_label_set_text(lbl_gps_sats_4, LV_SYMBOL_GPS " --");
+                c = C_SURFACE2;
             }
+            lv_obj_set_style_bg_color(shiftSeg[i], c, 0);
         }
     }
 
-    static bool lastOnline = false;
-    static int lastRpm = -999;
-    static float lastBoost = -999.0f;
-    static float lastAdv = -999.0f;
-
-    if (sens.ms2Online) {
-        if (!lastOnline) {
-            lv_obj_add_flag(lbl_m_offline, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(lbl_m_rpm, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(bar_m_shift, LV_OBJ_FLAG_HIDDEN);
-        }
-
-        if (!lastOnline || abs((int)sens.ms2.rpm - lastRpm) >= 20) {
-            lastRpm = sens.ms2.rpm;
-            lv_label_set_text_fmt(lbl_m_rpm, "%4d", sens.ms2.rpm);
-            // Тахометр Shift-Bar
-            lv_bar_set_value(bar_m_shift, constrain((int)sens.ms2.rpm, 0, 7500), LV_ANIM_OFF);
-            if (sens.ms2.rpm >= 6500) {
-                lv_obj_set_style_bg_color(bar_m_shift, COLOR_LV_M_RED, LV_PART_INDICATOR);
-            } else {
-                lv_obj_set_style_bg_color(bar_m_shift, COLOR_LV_WHITE, LV_PART_INDICATOR);
-            }
-        }
-
-        if (!lastOnline || fabs(sens.ms2.boost_bar - lastBoost) >= 0.02f) {
-            lastBoost = sens.ms2.boost_bar;
-            lv_label_set_text_fmt(lbl_m_boost, "%+.2fb", sens.ms2.boost_bar);
-        }
-
-        if (!lastOnline || fabs(sens.ms2.advance_deg - lastAdv) >= 0.5f) {
-            lastAdv = sens.ms2.advance_deg;
-            lv_label_set_text_fmt(lbl_m_adv, "%.1f*", sens.ms2.advance_deg);
-        }
-        lastOnline = true;
+    if (on) {
+        mBoost.value.setf("%+.2f", sBoost.value);
+        mBoost.setBar(clampI(lroundf(sBoost.value * 100), -100, 150));
+        mAdv.value.setf("%.1f", sAdv.value);
+        mAdv.setBar(clampI(lroundf(sAdv.value), 0, 45));
     } else {
-        if (lastOnline || lastRpm != 0) {
-            lastOnline = false;
-            lastRpm = 0;
-            lastBoost = -999.0f;
-            lastAdv = -999.0f;
-            lv_obj_clear_flag(lbl_m_offline, LV_OBJ_FLAG_HIDDEN);
-            lv_label_set_text(lbl_m_rpm, "0");
-            lv_bar_set_value(bar_m_shift, 0, LV_ANIM_OFF);
-        }
+        mBoost.value.set("-.--");
+        mBoost.setBar(-100);
+        mAdv.value.set("--.-");
+        mAdv.setBar(0);
+    }
+}
+
+void UiEngine::updateGaugeScreen(bool force) {
+    const SensorData& sens = Sensors.getData();
+    const TripData& trip = Trip.getData();
+    const TripPeaks& peaks = Trip.getPeaks();
+    const WarningState& warn = Warnings.getState();
+    const WarningSettings& ws = Warnings.getSettings();
+    bool on = sens.ms2Online;
+
+    static GaugeType lastG = GaugeType::COUNT;
+    bool changed = force || (currentGauge != lastG);
+    lastG = currentGauge;
+
+    float v = 0.0f, vMin = 0.0f, vMax = 1.0f;
+    bool valid = true;
+    bool isAlarm = false;
+    char val[16], peak[32], limit[32];
+    const char* unit = "";
+    const char* minTxt = "";
+    const char* maxTxt = "";
+
+    switch (currentGauge) {
+        case GaugeType::BOOST:
+            v = sBoost.value; vMin = -1.0f; vMax = 1.5f; valid = on;
+            snprintf(val, sizeof(val), "%+.2f", v);
+            snprintf(peak, sizeof(peak), "PEAK %+.2f", peaks.peak_boost_bar);
+            snprintf(limit, sizeof(limit), "LIMIT %.2f", ws.boost_max_bar);
+            unit = "BAR"; minTxt = "-1.0"; maxTxt = "+1.5";
+            isAlarm = warn.boostAlarm;
+            break;
+        case GaugeType::COOLANT:
+            v = sClt.value; vMin = 40.0f; vMax = 130.0f; valid = on;
+            snprintf(val, sizeof(val), "%d", (int)lroundf(v));
+            snprintf(peak, sizeof(peak), "PEAK %d\xC2\xB0", (int)lroundf(peaks.max_clt_c));
+            snprintf(limit, sizeof(limit), "LIMIT %d\xC2\xB0", (int)lroundf(ws.clt_max_c));
+            unit = "\xC2\xB0" "C"; minTxt = "40"; maxTxt = "130";
+            isAlarm = warn.cltAlarm;
+            break;
+        case GaugeType::AFR:
+            v = sAfr.value; vMin = 10.0f; vMax = 20.0f; valid = on;
+            snprintf(val, sizeof(val), "%.1f", v);
+            if (peaks.min_afr <= 30.0f && peaks.max_afr >= 5.0f) {
+                snprintf(peak, sizeof(peak), "RANGE %.1f-%.1f", peaks.min_afr, peaks.max_afr);
+            } else {
+                snprintf(peak, sizeof(peak), "RANGE --");
+            }
+            snprintf(limit, sizeof(limit), "SAFE %.1f-%.1f", ws.afr_rich_min, ws.afr_lean_max);
+            unit = "AFR"; minTxt = "10"; maxTxt = "20";
+            isAlarm = warn.afrAlarm;
+            break;
+        case GaugeType::INST_FUEL:
+            v = sInst.value; vMin = 0.0f; vMax = 30.0f;
+            snprintf(val, sizeof(val), "%.1f", v);
+            snprintf(peak, sizeof(peak), "PEAK %.1f", peaks.peak_instant_fuel);
+            snprintf(limit, sizeof(limit), "AVG %.1f", trip.avg_consumption_l_100km);
+            unit = trip.isLitersPerHour ? "L / HOUR" : "L / 100 KM"; minTxt = "0"; maxTxt = "30";
+            break;
+        case GaugeType::SPEED:
+            v = sSpeed.value; vMin = 0.0f; vMax = 240.0f;
+            snprintf(val, sizeof(val), "%d", (int)lroundf(v));
+            snprintf(peak, sizeof(peak), "MAX %d", (int)lroundf(peaks.max_speed_kmh));
+            snprintf(limit, sizeof(limit), "AVG %d", (int)lroundf(trip.avg_speed_kmh));
+            unit = "KM / H"; minTxt = "0"; maxTxt = "240";
+            break;
+        case GaugeType::INTAKE_TEMP:
+            v = sMat.value; vMin = 0.0f; vMax = 80.0f; valid = on;
+            snprintf(val, sizeof(val), "%d", (int)lroundf(v));
+            snprintf(peak, sizeof(peak), "PEAK %d\xC2\xB0", (int)lroundf(peaks.max_iat_c));
+            snprintf(limit, sizeof(limit), "LIMIT 55\xC2\xB0");
+            unit = "\xC2\xB0" "C"; minTxt = "0"; maxTxt = "80";
+            isAlarm = on && sMat.value >= 55.0f;
+            break;
+        case GaugeType::RPM:
+        default:
+            v = sRpm.value; vMin = 0.0f; vMax = 7500.0f; valid = on;
+            snprintf(val, sizeof(val), "%d", ((int)lroundf(v) / 10) * 10);
+            snprintf(peak, sizeof(peak), "PEAK %d", (int)peaks.max_rpm);
+            snprintf(limit, sizeof(limit), "REDLINE 6500");
+            unit = "RPM"; minTxt = "0"; maxTxt = "7500";
+            isAlarm = on && v >= 6500.0f;
+            break;
+    }
+
+    if (!valid) {
+        snprintf(val, sizeof(val), "--");
+        v = vMin;
+    }
+
+    gaugeVal.set(val);
+    lv_obj_align(gaugeVal.obj, LV_ALIGN_TOP_MID, 0, 96);
+    gaugePeak.set(peak);
+    gaugeLimit.set(limit);
+    lv_obj_align(gaugeLimit.obj, LV_ALIGN_TOP_RIGHT, -10, 208);
+    if (changed) {
+        gaugeUnit.set(unit);
+        lv_obj_align(gaugeUnit.obj, LV_ALIGN_TOP_MID, 0, 152);
+        gaugeMin.set(minTxt);
+        gaugeMax.set(maxTxt);
+        lv_obj_align(gaugeMin.obj, LV_ALIGN_TOP_MID, -52, 196);
+        lv_obj_align(gaugeMax.obj, LV_ALIGN_TOP_MID, 52, 196);
+    } else {
+        gaugeUnit.set(unit); // L/H <-> L/100 меняется на ходу
+    }
+
+    int32_t arcVal = clampI(lroundf((v - vMin) / (vMax - vMin) * 1000.0f), 0, 1000);
+    if (arcVal != gaugeArcLast) {
+        gaugeArcLast = arcVal;
+        lv_arc_set_value(gaugeArc, arcVal);
+    }
+
+    uintptr_t alarmState = isAlarm ? (warn.blinkPhase ? 2 : 1) : 0;
+    if (changed || alarmState != gaugeAlarmState) {
+        gaugeAlarmState = alarmState;
+        lv_obj_set_style_arc_color(gaugeArc, isAlarm ? C_M_RED : C_ACCENT, LV_PART_INDICATOR);
+        lv_obj_set_style_text_color(gaugeVal.obj, alarmState == 2 ? C_M_RED : C_TEXT, 0);
     }
 }
 
@@ -1178,290 +950,40 @@ void UiEngine::updateSettingsScreen() {
     const SensorData& sens = Sensors.getData();
     const GpsData& gps = Gps.getData();
 
-    static bool lastBleConn = false;
-    static bool lastCanOnline = false;
-    static uint32_t lastCanPkts = 0xFFFFFFFF;
-    static bool lastGpsFix = false;
-    static int lastGpsSats = -999;
-
-    bool bleConn = BleMgr.isConnected();
-    if (bleConn != lastBleConn) {
-        lastBleConn = bleConn;
-        lv_label_set_text_fmt(lbl_set_ble, LV_SYMBOL_BLUETOOTH " BLE: BMW_OBC_E36 (%s)",
-                              bleConn ? "CONNECTED" : "READY");
+    if (CanBus.isDemo()) {
+        infoCan.set("DEMO MODE");
+    } else {
+        infoCan.setf("%s  %lu", sens.ms2Online ? "ONLINE" : "OFFLINE",
+                     (unsigned long)CanBus.getTelemetry().packetsTotal);
     }
+    infoGps.setf("%s  %d SAT", gps.hasFix ? "FIX" : "SEARCH", gps.satellites);
+    if (Ota.isActive()) infoBle.set("UPDATING...");
+    else infoBle.set(BleMgr.isConnected() ? "CONNECTED" : "READY");
+    unsigned long up = millis() / 1000UL;
+    infoFw.setf("v%s  %luh%02lum", FW_VERSION, up / 3600UL, (up / 60UL) % 60UL);
 
-    uint32_t pkts = CanBus.getTelemetry().packetsTotal;
-    if (sens.ms2Online != lastCanOnline || pkts != lastCanPkts) {
-        lastCanOnline = sens.ms2Online;
-        lastCanPkts = pkts;
-        lv_label_set_text_fmt(lbl_set_can, "CAN: 500k (%s | %lu pkts)",
-                              sens.ms2Online ? "ONLINE" : "OFFLINE", pkts);
-    }
-
-    if (gps.hasFix != lastGpsFix || gps.satellites != lastGpsSats) {
-        lastGpsFix = gps.hasFix;
-        lastGpsSats = gps.satellites;
-        lv_label_set_text_fmt(lbl_set_gps, LV_SYMBOL_GPS " GPS: NEO-7M (%s | %d SATS)",
-                              gps.hasFix ? "3D FIX" : "SEARCH", gps.satellites);
-    }
+    lv_obj_align(infoCan.obj, LV_ALIGN_RIGHT_MID, -12, 0);
+    lv_obj_align(infoGps.obj, LV_ALIGN_RIGHT_MID, -12, 0);
+    lv_obj_align(infoBle.obj, LV_ALIGN_RIGHT_MID, -12, 0);
+    lv_obj_align(infoFw.obj, LV_ALIGN_RIGHT_MID, -12, 0);
 }
 
-// -----------------------------------------------------------------------------
-// ЭКРАН 5: ПОЛНОЭКРАННЫЙ ЦИФРОВОЙ ПРИБОР (SINGLE DIGITAL GAUGE)
-// -----------------------------------------------------------------------------
-void UiEngine::createScreenGauge() {
-    scr_gauge = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(scr_gauge, COLOR_LV_BLACK, 0);
-    lv_obj_clear_flag(scr_gauge, LV_OBJ_FLAG_SCROLLABLE);
-
-    // Статус MegaSquirt 2 в верхнем левом углу
-    lbl_ms2_status_5 = createMs2StatusLabel(scr_gauge);
-
-    // Индикатор GPS в верхнем правом углу
-    lbl_gps_sats_5 = createGpsCornerLabel(scr_gauge);
-
-    // Крупная спортивная карточка (300 x 198 px, отступ сверху 32 px для строки статуса)
-    card_digital_gauge = createCardTile(scr_gauge, 10, 32, 300, 198);
-
-    // Сверху: Название прибора и номер (шрифт Montserrat 20)
-    lbl_digital_title = lv_label_create(card_digital_gauge);
-    lv_obj_set_style_text_font(lbl_digital_title, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(lbl_digital_title, COLOR_LV_SILVER, 0);
-    lv_obj_align(lbl_digital_title, LV_ALIGN_TOP_MID, 0, 4);
-    lv_label_set_text(lbl_digital_title, "[1/7] BOOST / TURBO");
-
-    // По центру: Крупное четкое цифровое значение (проверенный стабильный 4bpp шрифт 70 px)
-    lbl_digital_val = lv_label_create(card_digital_gauge);
-    lv_obj_set_style_text_font(lbl_digital_val, &lv_font_clock_70, 0);
-    lv_obj_set_style_text_color(lbl_digital_val, COLOR_LV_WHITE, 0);
-    lv_obj_align(lbl_digital_val, LV_ALIGN_CENTER, 0, -8);
-    lv_label_set_text(lbl_digital_val, "0.00");
-
-    // Под цифрами: Единица измерения
-    lbl_digital_unit = lv_label_create(card_digital_gauge);
-    lv_obj_set_style_text_font(lbl_digital_unit, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(lbl_digital_unit, COLOR_LV_MID_GRAY, 0);
-    lv_obj_align(lbl_digital_unit, LV_ALIGN_CENTER, 0, 36);
-    lv_label_set_text(lbl_digital_unit, "BAR");
-
-    // Внизу слева: Пиковое значение за поездку (BMW Amber / Янтарный)
-    lbl_digital_peak = lv_label_create(card_digital_gauge);
-    lv_obj_set_size(lbl_digital_peak, 134, 20);
-    lv_obj_set_pos(lbl_digital_peak, 10, 168);
-    lv_obj_set_style_text_font(lbl_digital_peak, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_digital_peak, lv_color_make(255, 170, 0), 0);
-    lv_obj_set_style_text_align(lbl_digital_peak, LV_TEXT_ALIGN_LEFT, 0);
-    lv_label_set_long_mode(lbl_digital_peak, LV_LABEL_LONG_CLIP);
-    lv_label_set_text(lbl_digital_peak, "PK: +0.00b");
-
-    // Внизу справа: Сохраненные лимиты варнингов для данного прибора
-    lbl_digital_warn_limit = lv_label_create(card_digital_gauge);
-    lv_obj_set_size(lbl_digital_warn_limit, 134, 20);
-    lv_obj_set_pos(lbl_digital_warn_limit, 156, 168);
-    lv_obj_set_style_text_font(lbl_digital_warn_limit, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lbl_digital_warn_limit, COLOR_LV_SILVER, 0);
-    lv_obj_set_style_text_align(lbl_digital_warn_limit, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_label_set_long_mode(lbl_digital_warn_limit, LV_LABEL_LONG_CLIP);
-    lv_label_set_text(lbl_digital_warn_limit, "LIM: >1.20b");
-}
-
+// =============================================================================
+// ВЫБОР ПРИБОРА
+// =============================================================================
 void UiEngine::setGaugeType(GaugeType type) {
     if (type >= GaugeType::COUNT) type = GaugeType::BOOST;
     currentGauge = type;
     saveGaugeToNvs();
-    if (currentScreen == ScreenId::SINGLE_GAUGE) {
-        updateGaugeScreen();
-    }
+    updateTopLayer();
+    updateGaugeScreen(true);
 }
 
 void UiEngine::nextGaugeType() {
     int next = ((int)currentGauge + 1);
-    if (next >= (int)GaugeType::COUNT) {
-        next = 0;
-    }
+    if (next >= (int)GaugeType::COUNT) next = 0;
     setGaugeType((GaugeType)next);
-    Serial.printf("[UI] Переключение типа цифрового прибора: %d\n", next);
-}
-
-void UiEngine::updateGaugeScreen() {
-    const SensorData& sens = Sensors.getData();
-    const GpsData& gps = Gps.getData();
-    const TripData& trip = Trip.getData();
-    const TripPeaks& peaks = Trip.getPeaks();
-    const WarningState& warn = Warnings.getState();
-    const WarningSettings& ws = Warnings.getSettings();
-
-    // 1. Статус MegaSquirt 2 в верхнем левом углу
-    updateMs2StatusWidget(lbl_ms2_status_5, sens.ms2Online);
-
-    // 2. Индикатор спутников GPS в верхнем правом углу
-    static int lastSats5 = -99;
-    static bool lastFix5 = false;
-    if (lastSats5 != gps.satellites || lastFix5 != gps.hasFix) {
-        lastSats5 = gps.satellites;
-        lastFix5 = gps.hasFix;
-        if (gps.hasFix) {
-            lv_obj_set_style_text_color(lbl_gps_sats_5, COLOR_LV_WHITE, 0);
-            lv_label_set_text_fmt(lbl_gps_sats_5, LV_SYMBOL_GPS " %d", gps.satellites);
-        } else {
-            lv_obj_set_style_text_color(lbl_gps_sats_5, COLOR_LV_MID_GRAY, 0);
-            if (gps.satellites > 0) {
-                lv_label_set_text_fmt(lbl_gps_sats_5, LV_SYMBOL_GPS " %d", gps.satellites);
-            } else {
-                lv_label_set_text(lbl_gps_sats_5, LV_SYMBOL_GPS " --");
-            }
-        }
-    }
-
-    // Заголовки и единицы обновляются ТОЛЬКО при смене типа прибора
-    static GaugeType lastG = (GaugeType)-1;
-    bool gaugeChanged = (currentGauge != lastG);
-    if (gaugeChanged) {
-        lastG = currentGauge;
-        switch (currentGauge) {
-            case GaugeType::BOOST:
-                lv_label_set_text(lbl_digital_title, "[1/7] BOOST / TURBO");
-                lv_label_set_text(lbl_digital_unit, "BAR");
-                break;
-            case GaugeType::COOLANT:
-                lv_label_set_text(lbl_digital_title, "[2/7] COOLANT TEMP");
-                lv_label_set_text(lbl_digital_unit, "\xC2\xB0 C");
-                break;
-            case GaugeType::AFR:
-                lv_label_set_text(lbl_digital_title, "[3/7] AIR / FUEL RATIO");
-                lv_label_set_text(lbl_digital_unit, "AFR");
-                break;
-            case GaugeType::INST_FUEL:
-                lv_label_set_text(lbl_digital_title, "[4/7] INSTANT FUEL");
-                lv_label_set_text(lbl_digital_unit, trip.isLitersPerHour ? "L / HOUR" : "L / 100KM");
-                break;
-            case GaugeType::SPEED:
-                lv_label_set_text(lbl_digital_title, "[5/7] GPS SPEED");
-                lv_label_set_text(lbl_digital_unit, "KM / H");
-                break;
-            case GaugeType::INTAKE_TEMP:
-                lv_label_set_text(lbl_digital_title, "[6/7] INTAKE AIR TEMP");
-                lv_label_set_text(lbl_digital_unit, "\xC2\xB0 C");
-                break;
-            case GaugeType::RPM:
-                lv_label_set_text(lbl_digital_title, "[7/7] TACHOMETER");
-                lv_label_set_text(lbl_digital_unit, "RPM");
-                break;
-            default: break;
-        }
-    }
-
-    bool isAlarm = false;
-    char valBuf[32] = {0};
-    char peakBuf[48] = {0};
-    char limitBuf[48] = {0};
-
-    switch (currentGauge) {
-        case GaugeType::BOOST: {
-            float b = sens.ms2Online ? sens.ms2.boost_bar : 0.0f;
-            snprintf(valBuf, sizeof(valBuf), "%+.2f", b);
-            snprintf(peakBuf, sizeof(peakBuf), "PK: %+.2fb", peaks.peak_boost_bar);
-            snprintf(limitBuf, sizeof(limitBuf), "LIM: >%.2fb", ws.boost_max_bar);
-            isAlarm = warn.boostAlarm;
-            break;
-        }
-        case GaugeType::COOLANT: {
-            if (sens.ms2Online) {
-                snprintf(valBuf, sizeof(valBuf), "%d", (int)round(sens.ms2.clt_c));
-            } else {
-                snprintf(valBuf, sizeof(valBuf), "--");
-            }
-            snprintf(peakBuf, sizeof(peakBuf), "PK: %d\xC2\xB0 C", (int)round(peaks.max_clt_c));
-            snprintf(limitBuf, sizeof(limitBuf), "LIM: >%d\xC2\xB0 C", (int)round(ws.clt_max_c));
-            isAlarm = warn.cltAlarm;
-            break;
-        }
-        case GaugeType::AFR: {
-            if (sens.ms2Online) {
-                snprintf(valBuf, sizeof(valBuf), "%.1f", sens.ms2.afr);
-            } else {
-                snprintf(valBuf, sizeof(valBuf), "--.-");
-            }
-            if (peaks.min_afr <= 30.0f && peaks.max_afr >= 5.0f) {
-                snprintf(peakBuf, sizeof(peakBuf), "PK: %.1f/%.1f", peaks.min_afr, peaks.max_afr);
-            } else {
-                snprintf(peakBuf, sizeof(peakBuf), "PK: --.-");
-            }
-            snprintf(limitBuf, sizeof(limitBuf), "LIM: %.1f-%.1f", ws.afr_rich_min, ws.afr_lean_max);
-            isAlarm = warn.afrAlarm;
-            break;
-        }
-        case GaugeType::INST_FUEL: {
-            if (gaugeChanged || trip.isLitersPerHour != (lastG == currentGauge)) {
-                lv_label_set_text(lbl_digital_unit, trip.isLitersPerHour ? "L / HOUR" : "L / 100KM");
-            }
-            snprintf(valBuf, sizeof(valBuf), "%.1f", trip.instant_consumption);
-            snprintf(peakBuf, sizeof(peakBuf), "PK: %.1f L", peaks.peak_instant_fuel);
-            snprintf(limitBuf, sizeof(limitBuf), "LIM: >25.0 L");
-            isAlarm = (trip.instant_consumption >= 25.0f && !trip.isLitersPerHour);
-            break;
-        }
-        case GaugeType::SPEED: {
-            snprintf(valBuf, sizeof(valBuf), "%d", (int)round(trip.current_speed_kmh));
-            snprintf(peakBuf, sizeof(peakBuf), "MAX: %d KM/H", (int)round(peaks.max_speed_kmh));
-            snprintf(limitBuf, sizeof(limitBuf), "LIM: >140");
-            isAlarm = (trip.current_speed_kmh >= 140.0f);
-            break;
-        }
-        case GaugeType::INTAKE_TEMP: {
-            if (sens.ms2Online) {
-                snprintf(valBuf, sizeof(valBuf), "%d", (int)round(sens.ms2.mat_c));
-            } else {
-                snprintf(valBuf, sizeof(valBuf), "--");
-            }
-            snprintf(peakBuf, sizeof(peakBuf), "PK: %d\xC2\xB0 C", (int)round(peaks.max_iat_c));
-            snprintf(limitBuf, sizeof(limitBuf), "LIM: >55\xC2\xB0 C");
-            isAlarm = sens.ms2Online && (sens.ms2.mat_c >= 55.0f);
-            break;
-        }
-        case GaugeType::RPM: {
-            int rpm = sens.ms2Online ? (int)sens.ms2.rpm : 0;
-            snprintf(valBuf, sizeof(valBuf), "%d", rpm);
-            snprintf(peakBuf, sizeof(peakBuf), "PK: %d RPM", (int)peaks.max_rpm);
-            snprintf(limitBuf, sizeof(limitBuf), "REDLINE: >6500");
-            isAlarm = (rpm >= 6500);
-            break;
-        }
-        default: break;
-    }
-
-    // Обновляем строковые метки ТОЛЬКО если текст реально изменился!
-    static char lastValStr[32] = "";
-    static char lastPeakStr[48] = "";
-    static char lastLimitStr[48] = "";
-
-    if (gaugeChanged || strcmp(valBuf, lastValStr) != 0) {
-        strncpy(lastValStr, valBuf, sizeof(lastValStr));
-        lv_label_set_text(lbl_digital_val, valBuf);
-    }
-    if (gaugeChanged || strcmp(peakBuf, lastPeakStr) != 0) {
-        strncpy(lastPeakStr, peakBuf, sizeof(lastPeakStr));
-        lv_label_set_text(lbl_digital_peak, peakBuf);
-    }
-    if (gaugeChanged || strcmp(limitBuf, lastLimitStr) != 0) {
-        strncpy(lastLimitStr, limitBuf, sizeof(lastLimitStr));
-        lv_label_set_text(lbl_digital_warn_limit, limitBuf);
-    }
-
-    // Стилизация при тревоге
-    applyCardWarning(card_digital_gauge, isAlarm, warn.blinkPhase);
-    static bool lastAlarmState = false;
-    if (gaugeChanged || isAlarm != lastAlarmState) {
-        lastAlarmState = isAlarm;
-        if (isAlarm) {
-            lv_obj_set_style_text_color(lbl_digital_val, COLOR_LV_WHITE, 0);
-            lv_obj_set_style_text_color(lbl_digital_title, COLOR_LV_WHITE, 0);
-        } else {
-            lv_obj_set_style_text_color(lbl_digital_val, COLOR_LV_WHITE, 0);
-            lv_obj_set_style_text_color(lbl_digital_title, COLOR_LV_SILVER, 0);
-        }
-    }
+    Serial.printf("[UI] Прибор: %d\n", next);
 }
 
 void UiEngine::loadGaugeFromNvs() {

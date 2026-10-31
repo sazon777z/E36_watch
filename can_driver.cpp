@@ -22,7 +22,7 @@ static inline float convertMs2Temp(int16_t raw) {
 #endif
 }
 
-CanDriver::CanDriver() : isDriverInstalled(false) {
+CanDriver::CanDriver() : isDriverInstalled(false), demoMode(false) {
     memset(&telemetry, 0, sizeof(Ms2Telemetry));
     telemetry.batt_volt = 12.6f;
     telemetry.clt_c = 20.0f;
@@ -73,7 +73,51 @@ void CanDriver::shutdown() {
     isDriverInstalled = false;
 }
 
+void CanDriver::setDemo(bool on) {
+    demoMode = on;
+    Serial.printf("[CAN] Демо-режим %s\n", on ? "ВКЛЮЧЕН (имитация MS2)" : "выключен");
+}
+
+// Имитация типичного заезда: холостые -> разгон по передачам -> сброс газа (цикл 12 с)
+void CanDriver::updateDemo() {
+    unsigned long now = millis();
+    float t = (float)(now % 12000UL) / 1000.0f;
+
+    float rpm;
+    if (t < 2.0f) {
+        rpm = 850.0f + 30.0f * sinf(t * 9.0f);                    // холостые
+    } else if (t < 9.0f) {
+        float g = fmodf(t - 2.0f, 2.33f) / 2.33f;                 // три передачи
+        rpm = 3000.0f + g * 4000.0f;
+    } else {
+        rpm = 7000.0f - (t - 9.0f) / 3.0f * 6100.0f;              // сброс газа
+    }
+    bool load = (t >= 2.0f && t < 9.0f);
+
+    telemetry.rpm = (uint16_t)rpm;
+    telemetry.tps_pct = load ? 95.0f : 0.0f;
+    telemetry.map_kpa = load ? 100.0f + (rpm - 3000.0f) / 4000.0f * 120.0f : 35.0f;
+    telemetry.baro_kpa = 100.0f;
+    telemetry.boost_bar = (telemetry.map_kpa - 100.0f) / 100.0f;
+    telemetry.afr = load ? 11.8f + 0.3f * sinf(t * 3.0f) : (rpm > 1200.0f ? 18.5f : 14.7f);
+    telemetry.afr_target = load ? 11.8f : 14.7f;
+    telemetry.advance_deg = load ? 18.0f - telemetry.boost_bar * 6.0f : 32.0f;
+    telemetry.clt_c = 88.0f + 4.0f * sinf((float)now / 20000.0f);
+    telemetry.mat_c = 32.0f + (load ? 6.0f : 0.0f);
+    telemetry.batt_volt = 14.1f;
+    telemetry.pw1_us = load ? (uint16_t)(4000 + rpm) : 2200;
+    telemetry.speed_kmh = (uint16_t)(rpm / 60.0f);
+
+    telemetry.isOnline = true;
+    telemetry.lastPacketMs = now;
+    telemetry.packetsTotal++;
+}
+
 void CanDriver::update() {
+    if (demoMode) {
+        updateDemo();
+        return;
+    }
     if (!isDriverInstalled) return;
 
     // Автоматическое восстановление CAN-контроллера при переходе в Bus-Off (помехи / стартер)

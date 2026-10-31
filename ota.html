@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E36 OBC — обновление прошивки</title>
+<style>
+    :root { --bg: #000; --card: #111; --line: #2a2a2a; --text: #fff; --dim: #888; --accent: #0066b1; --red: #e11e28; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+           padding: 16px; display: flex; justify-content: center; }
+    .wrap { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 14px; }
+    h1 { font-size: 20px; font-style: italic; letter-spacing: 1px; text-transform: uppercase; }
+    .sub { font-size: 12px; color: var(--dim); margin-top: 4px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    button { background: #fff; color: #000; border: 0; border-radius: 6px; padding: 13px; font-size: 14px; font-weight: 700; text-transform: uppercase; cursor: pointer; }
+    button:disabled { opacity: .4; cursor: default; }
+    button.ghost { background: #1a1a1a; color: #fff; border: 1px solid #3a3a3a; }
+    input { width: 100%; background: #000; color: #fff; border: 1px solid #333; border-radius: 6px; padding: 10px; font-size: 14px; }
+    .row { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); }
+    .bar { height: 8px; background: #222; border-radius: 4px; overflow: hidden; }
+    .bar > div { height: 100%; width: 0%; background: var(--accent); transition: width .2s; }
+    .status { font-size: 12px; color: var(--dim); min-height: 16px; }
+    .log { font: 11px/1.4 monospace; color: #6c6; background: #050505; border: 1px solid var(--line); border-radius: 6px; padding: 8px; white-space: pre-wrap; max-height: 140px; overflow: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div>
+        <h1>BMW E36 OBC</h1>
+        <div class="sub">Обновление прошивки по Bluetooth (Chrome / Edge на Android или ПК)</div>
+    </div>
+
+    <div class="card">
+        <div class="row"><span id="connState">ОТКЛЮЧЕНО</span><span id="fwVer">v ---</span></div>
+        <button id="btnConnect" class="ghost" onclick="toggleConnect()">Подключиться к BMW-E36-OBC</button>
+        <button class="ghost" style="padding: 8px; font-size: 11px;" onclick="toggleConnect(true)">Не находит? Показать все устройства</button>
+    </div>
+
+    <div class="card">
+        <input type="file" id="otaFile" accept=".bin">
+        <input type="password" id="otaPin" placeholder="PIN обновления (OTA_PIN)">
+        <div class="bar"><div id="otaBar"></div></div>
+        <div class="status" id="otaStatus">Файл: Скетч → Экспорт бинарного файла → E36_watch.ino.bin</div>
+        <button id="otaBtn" onclick="startOta()">⬆ Залить прошивку</button>
+    </div>
+
+    <div class="log" id="log"></div>
+</div>
+
+<script>
+    const OTA_SERVICE_UUID = 'c0de0001-e36b-4d57-a0b1-0b1e0a7a0001';
+    const OTA_CTRL_UUID    = 'c0de0002-e36b-4d57-a0b1-0b1e0a7a0001';
+    const OTA_DATA_UUID    = 'c0de0003-e36b-4d57-a0b1-0b1e0a7a0001';
+    const OTA_CHUNK = 500;
+
+    let bleDevice = null;
+    let otaCtrlChar = null;
+    let otaDataChar = null;
+    let otaWaiter = null;   // { prefix, resolve, reject } - ожидание ответа OK/ERR
+    let otaBusy = false;
+
+    function log(msg) {
+        const el = document.getElementById('log');
+        el.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + el.textContent.slice(0, 2000);
+    }
+
+    function setConnectedUI(connected) {
+        document.getElementById('connState').textContent = connected ? 'ПОДКЛЮЧЕНО' : 'ОТКЛЮЧЕНО';
+        document.getElementById('btnConnect').textContent = connected ? 'Отключиться' : 'Подключиться к BMW-E36-OBC';
+        if (!connected) document.getElementById('fwVer').textContent = 'v ---';
+    }
+
+    const LEGACY_NUS_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+
+    async function toggleConnect(showAll = false) {
+        if (bleDevice && bleDevice.gatt.connected) {
+            bleDevice.gatt.disconnect();
+            return;
+        }
+        try {
+            log('Поиск устройства...');
+            // Имя может не поместиться в рекламный пакет вместе с UUID, поэтому ищем
+            // и по имени, и по сервисам (OTA - новые прошивки, NUS - прошивка 2.7)
+            const opts = showAll
+                ? { acceptAllDevices: true, optionalServices: [OTA_SERVICE_UUID] }
+                : {
+                    filters: [
+                        { name: 'BMW-E36-OBC' },
+                        { namePrefix: 'BMW' },
+                        { services: [OTA_SERVICE_UUID] },
+                        { services: [LEGACY_NUS_UUID] }
+                    ],
+                    optionalServices: [OTA_SERVICE_UUID]
+                };
+            bleDevice = await navigator.bluetooth.requestDevice(opts);
+            bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+            const server = await bleDevice.gatt.connect();
+            const svc = await server.getPrimaryService(OTA_SERVICE_UUID);
+            otaCtrlChar = await svc.getCharacteristic(OTA_CTRL_UUID);
+            otaDataChar = await svc.getCharacteristic(OTA_DATA_UUID);
+            await otaCtrlChar.startNotifications();
+            otaCtrlChar.addEventListener('characteristicvaluechanged', onOtaNotify);
+            setConnectedUI(true);
+            log('Подключено.');
+            await otaCtrl('ver');
+        } catch (err) {
+            log('Ошибка: ' + err.message);
+            setConnectedUI(false);
+        }
+    }
+
+    function onDisconnected() {
+        log('Связь разорвана.');
+        setConnectedUI(false);
+        otaCtrlChar = null;
+        otaDataChar = null;
+        if (otaWaiter) otaWaiter.reject(new Error('связь разорвана'));
+    }
+
+    function crc32(bytes) {
+        let table = crc32.table;
+        if (!table) {
+            table = crc32.table = new Uint32Array(256);
+            for (let i = 0; i < 256; i++) {
+                let c = i;
+                for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+                table[i] = c >>> 0;
+            }
+        }
+        let crc = 0xFFFFFFFF;
+        for (let i = 0; i < bytes.length; i++) crc = table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    function setOtaStatus(text, pct) {
+        document.getElementById('otaStatus').textContent = text;
+        if (pct !== undefined) document.getElementById('otaBar').style.width = pct + '%';
+    }
+
+    async function otaCtrl(cmd) {
+        await otaCtrlChar.writeValueWithResponse(new TextEncoder().encode(cmd));
+    }
+
+    // Отправляет команду и ждет ответа, начинающегося с okPrefix (или ERR)
+    function otaRequest(cmd, okPrefix, timeoutMs) {
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                otaWaiter = null;
+                reject(new Error('нет ответа на "' + cmd.split(' ')[0] + '"'));
+            }, timeoutMs);
+            otaWaiter = {
+                prefix: okPrefix,
+                resolve: (v) => { clearTimeout(timer); otaWaiter = null; resolve(v); },
+                reject: (e) => { clearTimeout(timer); otaWaiter = null; reject(e); }
+            };
+            otaCtrl(cmd).catch(e => otaWaiter && otaWaiter.reject(e));
+        });
+    }
+
+    function onOtaNotify(event) {
+        const text = new TextDecoder().decode(event.target.value).trim();
+        if (text.startsWith('VER ')) {
+            document.getElementById('fwVer').textContent = 'v' + text.substring(4);
+            return;
+        }
+        if (text.startsWith('PROG ')) return; // прогресс считается на стороне страницы
+        if (otaWaiter) {
+            if (text.startsWith(otaWaiter.prefix)) otaWaiter.resolve(text);
+            else if (text.startsWith('ERR')) otaWaiter.reject(new Error(text));
+        } else if (text.startsWith('ERR')) {
+            log('OTA: ' + text);
+        }
+    }
+
+    async function startOta() {
+        if (otaBusy) return;
+        if (!otaCtrlChar || !otaDataChar) { setOtaStatus('Сначала подключитесь к устройству.'); return; }
+        const file = document.getElementById('otaFile').files[0];
+        const pin = document.getElementById('otaPin').value.trim();
+        if (!file) { setOtaStatus('Выберите файл прошивки .bin'); return; }
+        if (!pin) { setOtaStatus('Введите PIN обновления'); return; }
+
+        const data = new Uint8Array(await file.arrayBuffer());
+        if (data.length < 1024 || data[0] !== 0xE9) {
+            setOtaStatus('Это не файл прошивки ESP32 (нужен E36_watch.ino.bin, не .merged/.bootloader).');
+            return;
+        }
+        if (!confirm(`Залить прошивку ${file.name} (${(data.length / 1024).toFixed(0)} КБ)?\nНе отключайте питание и не уходите со страницы.`)) return;
+
+        otaBusy = true;
+        document.getElementById('otaBtn').disabled = true;
+        const crc = crc32(data);
+        const t0 = Date.now();
+
+        try {
+            setOtaStatus('Подготовка...', 0);
+            await otaRequest(`begin ${data.length} ${crc.toString(16)} ${pin}`, 'OK BEGIN', 10000);
+            log('Начата загрузка ' + file.name);
+
+            let lastUi = 0;
+            for (let off = 0; off < data.length; off += OTA_CHUNK) {
+                if (!otaDataChar) throw new Error('связь разорвана');
+                await otaDataChar.writeValueWithResponse(data.subarray(off, Math.min(off + OTA_CHUNK, data.length)));
+                const now = Date.now();
+                if (now - lastUi > 250) {
+                    lastUi = now;
+                    const sent = Math.min(off + OTA_CHUNK, data.length);
+                    const kbps = sent / 1024 / ((now - t0) / 1000);
+                    setOtaStatus(`Передача: ${(sent / 1024).toFixed(0)} / ${(data.length / 1024).toFixed(0)} КБ (${kbps.toFixed(1)} КБ/с)`,
+                                 (sent * 100 / data.length).toFixed(1));
+                }
+            }
+
+            setOtaStatus('Проверка прошивки на устройстве...', 100);
+            await otaRequest('end', 'OK DONE', 20000);
+            const sec = ((Date.now() - t0) / 1000).toFixed(0);
+            setOtaStatus(`Готово за ${sec} с. Устройство перезагружается.`, 100);
+            log('Прошивка успешно загружена, перезагрузка.');
+        } catch (err) {
+            setOtaStatus('Ошибка: ' + err.message);
+            log('Ошибка: ' + err.message);
+            if (otaCtrlChar) otaCtrl('abort').catch(() => {});
+        } finally {
+            otaBusy = false;
+            document.getElementById('otaBtn').disabled = false;
+        }
+    }
+
+    if (!navigator.bluetooth) {
+        log('Этот браузер не поддерживает Web Bluetooth. Используйте Chrome или Edge.');
+    }
+</script>
+</body>
+</html>

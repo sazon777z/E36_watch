@@ -46,7 +46,6 @@
 
 // Тайминги выполнения задач
 unsigned long lastSensorUpdate = 0;
-unsigned long lastUiUpdate = 0;
 
 static const char* getResetReasonStr(esp_reset_reason_t r) {
     switch (r) {
@@ -149,7 +148,7 @@ void loop() {
     // 3. Расчет одометра и расхода топлива
     Trip.update();
 
-    // 4. Обслуживание Bluetooth Low Energy (NUS сервис)
+    // 4. Обслуживание Bluetooth Low Energy (только обновление прошивки)
     BleMgr.update();
 
     unsigned long currentMillis = millis();
@@ -167,9 +166,13 @@ void loop() {
         if (c == 'n' || c == 'N') {
             Serial.println("[CMD] 'n' -> Следующий экран");
             UI.nextScreen();
-        } else if (c == 'g' || c == 'G' || c == 'd' || c == 'D') {
-            Serial.println("[CMD] 'g'/'d' -> Следующий тип датчика");
+        } else if (c == 'g' || c == 'G') {
+            Serial.println("[CMD] 'g' -> Следующий тип датчика");
             UI.nextGaugeType();
+        } else if (c == 'd' || c == 'D') {
+            CanBus.setDemo(!CanBus.isDemo());
+        } else if (c == 'c' || c == 'C') {
+            UI.captureScreen();
         } else if (c == 'h' || c == 'H') {
             Serial.println("[CMD] 'h' -> Имитация удержания кнопки (HOLD)");
             if (UI.getCurrentScreen() == ScreenId::SINGLE_GAUGE) {
@@ -196,13 +199,21 @@ void loop() {
             Display.getTft().fillScreen(0x0000);
             lv_obj_invalidate(lv_scr_act());
             Serial.println("[TEST] Тест завершен, LVGL экран перерисован.");
-        } else if (c == 'b' || c == 'B') {
-            Serial.println("[CMD] Подсветка зафиксирована на 100% (максимум)");
         } else if (c == 'p' || c == 'P') {
             const GpsData& g = Gps.getData();
             Serial.printf("[GPS] fix=%d sats=%u hdop=%.1f raw=%.1f km/h -> %.1f km/h (moving=%d) | trip=%.3f km\n",
                           g.hasFix ? 1 : 0, g.satellites, g.hdop, g.rawSpeed_kmh, g.speed_kmh,
                           g.moving ? 1 : 0, Trip.getData().trip_distance_km);
+        } else if (c == 'z' || c == 'Z') {
+            // Часовой пояс: "z5", "z-3" (Bluetooth-приложения больше нет)
+            Serial.setTimeout(500);
+            long tz = Serial.parseInt();
+            if (tz >= -12 && tz <= 14) {
+                Time.setTimezoneOffset((int8_t)tz);
+                Serial.printf("[CMD] Часовой пояс: UTC%+ld\n", tz);
+            } else {
+                Serial.println("[CMD] Формат: z<-12..14>, например z5");
+            }
         } else if (c == 's' || c == 'S') {
             Serial.println("[CMD] 's' -> Принудительный переход в глубокий сон");
             Power.enterDeepSleep();
@@ -247,11 +258,8 @@ void loop() {
     // 5. Обновление системного времени
     Time.update();
 
-    // 6. Отрисовка графического интерфейса UI через LVGL (каждые 50 мс, 20 FPS)
-    if (currentMillis - lastUiUpdate >= 50) {
-        lastUiUpdate = currentMillis;
-        UI.update();
-    }
+    // 6. Интерфейс: данные ~30 Гц, отрисовка LVGL до 60 кадров/с (ограничивает сам LVGL)
+    UI.update();
 
     // 7. Глубокий сон при выключенном зажигании (тишина на CAN-шине)
     Power.update();
