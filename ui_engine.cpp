@@ -2,6 +2,7 @@
 #include "ble_manager.h"
 #include "can_driver.h"
 #include "ota_manager.h"
+#include "ts_bridge.h"
 #include <Preferences.h>
 #include <stdarg.h>
 #include <Fonts/FreeSansBoldOblique12pt7b.h>
@@ -483,7 +484,7 @@ void UiEngine::createScreenSettings() {
 
     makeInfoRow(infoCan, s, 28, "CAN MS2");
     makeInfoRow(infoGps, s, 78, "GPS");
-    makeInfoRow(infoBle, s, 128, "BLE OTA");
+    makeInfoRow(infoBle, s, 128, "BLE / TS");
     makeInfoRow(infoFw,  s, 178, "FIRMWARE");
 }
 
@@ -963,10 +964,13 @@ void UiEngine::updateSettingsScreen() {
                      (unsigned long)CanBus.getTelemetry().packetsTotal);
     }
     infoGps.setf("%s  %d SAT", gps.hasFix ? "FIX" : "SEARCH", gps.satellites);
-    if (Ota.isActive()) infoBle.set("UPDATING...");
-    else infoBle.set(BleMgr.isConnected() ? "CONNECTED" : "READY");
+    // BLE OTA и состояние моста TunerStudio: OFF / WAIT / ECU / PC / LINK
+    const char* bleStr = Ota.isActive() ? "UPDATING" : (BleMgr.isConnected() ? "CONNECTED" : "READY");
+    infoBle.setf("%s  TS %s", bleStr, TsBridge.statusStr());
     unsigned long up = millis() / 1000UL;
-    infoFw.setf("v%s  %luh%02lum", FW_VERSION, up / 3600UL, (up / 60UL) % 60UL);
+    // Свободная память (кБ): с мостом TunerStudio монитор порта недоступен, смотрим здесь
+    infoFw.setf("v%s  %luh%02lum  %uK", FW_VERSION, up / 3600UL, (up / 60UL) % 60UL,
+                (unsigned int)(ESP.getFreeHeap() / 1024));
 
     lv_obj_align(infoCan.obj, LV_ALIGN_RIGHT_MID, -12, 0);
     lv_obj_align(infoGps.obj, LV_ALIGN_RIGHT_MID, -12, 0);

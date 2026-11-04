@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 *.elf
 *.bin
+
+# Секреты (PIN, ключи) — только локально
+secrets.h

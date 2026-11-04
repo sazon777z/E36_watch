@@ -5,6 +5,7 @@
 #include "trip_computer.h"
 #include "ble_manager.h"
 #include "ota_manager.h"
+#include "ts_bridge.h"
 
 PowerManager Power;
 
@@ -67,6 +68,7 @@ void PowerManager::enterDeepSleep() {
     Serial.println("[POWER] CAN-шина молчит. Сохранение данных и переход в глубокий сон...");
 
     Trip.saveNow();
+    TsBridge.shutdown();   // снять питание с FT232 ЭБУ
     CanBus.shutdown();
     Display.sleep();
 

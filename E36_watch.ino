@@ -41,6 +41,7 @@
 #include "ui_engine.h"
 #include "ble_manager.h"
 #include "power_manager.h"
+#include "ts_bridge.h"
 
 #include <esp_system.h>
 
@@ -125,6 +126,13 @@ void setup() {
     UI.init();
     BleMgr.init();
 
+    // 6. Беспроводной мост TunerStudio (USB-хост FT232 ЭБУ + ESP-NOW).
+    // После запуска USB платы занят: монитор порта недоступен (кроме сервисного режима).
+    Serial.printf("[MEM] Free Heap до моста TS: %u bytes\n", (unsigned int)ESP.getFreeHeap());
+    TsBridge.init();
+    Serial.printf("[MEM] Free Heap после моста TS: %u bytes (мост: %s)\n",
+                  (unsigned int)ESP.getFreeHeap(), TsBridge.isRunning() ? "запущен" : "выключен");
+
     lv_obj_invalidate(lv_scr_act());
     lv_timer_handler();
 
@@ -141,6 +149,9 @@ void setup() {
 void loop() {
     // 1. Постоянный неблокирующий прием пакетов CAN-шины MegaSquirt 2
     CanBus.update();
+
+    // 1a. Питание FT232 ЭБУ для моста TunerStudio (только пока MS2 на связи)
+    TsBridge.update();
 
     // 2. Постоянное чтение и парсинг потока NMEA от GPS-модуля
     Gps.update();
