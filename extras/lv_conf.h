@@ -46,7 +46,10 @@
  *=========================*/
 
 /*1: use custom malloc/free, 0: use the built-in `lv_mem_alloc()` and `lv_mem_free()`*/
-#define LV_MEM_CUSTOM 0
+/* E36_watch: память LVGL берется из PSRAM (Arduino: PSRAM = QSPI PSRAM), если ее нет — из внутренней RAM.
+ * Встроенный пул на 80 кБ во внутренней памяти не оставлял места Wi-Fi моста TunerStudio
+ * (свободно было ~1 кБ, ESP-NOW не мог выделить буферы и молчал). */
+#define LV_MEM_CUSTOM 1
 #if LV_MEM_CUSTOM == 0
     /*Size of the memory available for `lv_mem_alloc()` in bytes (>= 2kB)*/
     #define LV_MEM_SIZE (80U * 1024U)          /*[bytes]*/
@@ -60,10 +63,12 @@
     #endif
 
 #else       /*LV_MEM_CUSTOM*/
-    #define LV_MEM_CUSTOM_INCLUDE <stdlib.h>   /*Header for the dynamic memory function*/
-    #define LV_MEM_CUSTOM_ALLOC   malloc
-    #define LV_MEM_CUSTOM_FREE    free
-    #define LV_MEM_CUSTOM_REALLOC realloc
+    #define LV_MEM_CUSTOM_INCLUDE <esp_heap_caps.h>   /*Header for the dynamic memory function*/
+    #define LV_MEM_CUSTOM_ALLOC(size)      heap_caps_malloc_prefer((size), 2, \
+                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+    #define LV_MEM_CUSTOM_FREE             heap_caps_free
+    #define LV_MEM_CUSTOM_REALLOC(p, size) heap_caps_realloc_prefer((p), (size), 2, \
+                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
 #endif     /*LV_MEM_CUSTOM*/
 
 /*Number of the intermediate memory buffer used during rendering and other internal processing mechanisms.

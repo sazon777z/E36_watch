@@ -1,10 +1,11 @@
 // =============================================================================
 // ts_link.h — радиоканал ESP-NOW «беспроводной кабель» TunerStudio <-> MegaSquirt 2
 // -----------------------------------------------------------------------------
-// ОДИН И ТОТ ЖЕ ФАЙЛ лежит в двух прошивках:
+// ОДИН И ТОТ ЖЕ ФАЙЛ лежит в трех прошивках:
 //   * дэшборд E36_watch (ESP32-S3, сторона машины)      -> E36_watch/ts_link.h
 //   * донгл у ноутбука (ESP32-C3, сторона компьютера)   -> extras/ts_dongle_c3/ts_link.h
-// Меняете один — скопируйте его во второй.
+//   * диагностика донгла на столе (ESP32-C3)            -> extras/ts_dongle_diag/ts_link.h
+// Меняете один — скопируйте его в остальные.
 //
 // Как работает:
 //   * Оба устройства раз в 250–500 мс рассылают широковещательный HELLO с общим
@@ -80,7 +81,7 @@ public:
         sendDone = xSemaphoreCreateBinary();
         if (!sendDone) return false;
 
-        WiFi.mode(WIFI_STA);
+        if (!WiFi.mode(WIFI_STA)) return false;
         WiFi.disconnect();
         esp_wifi_set_ps(WIFI_PS_NONE);  // при работающем BLE может быть отклонено — не страшно
         esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
@@ -169,7 +170,8 @@ public:
             if (hasPeer) memcpy(h.peerMac, peerMac, 6);
             h.flags = localFlags;
             static const uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-            esp_now_send(bcast, (const uint8_t*)&h, sizeof(h));
+            if (esp_now_send(bcast, (const uint8_t*)&h, sizeof(h)) == ESP_OK) statHelloTx++;
+            else statHelloErr++;  // чаще всего ESP_ERR_ESPNOW_NO_MEM: не хватает памяти
         }
     }
 
@@ -215,6 +217,9 @@ public:
     bool isStarted() const { return started; }
 
     uint32_t statTxPackets = 0, statRxPackets = 0, statRetries = 0, statDrops = 0;
+    uint32_t statHelloTx = 0, statHelloErr = 0;  // отправка HELLO: поставлено в очередь / ошибка
+    volatile uint32_t statRawRx = 0;             // любые принятые кадры ESP-NOW
+    bool hasPeerNow() const { return hasPeer; }
 
 private:
     static RadioLink* self;
@@ -255,6 +260,7 @@ private:
 
     static void onRecvStatic(const esp_now_recv_info_t* info, const uint8_t* d, int n) {
         RadioLink* s = self;
+        if (s) s->statRawRx++;
         if (!s || !info || n < 3 || d[0] != MAGIC || d[1] != PROTO_VER) return;
         if (d[2] == PKT_HELLO && n >= (int)sizeof(HelloPkt)) {
             s->handleHello(info->src_addr, (const HelloPkt*)d);

@@ -10,6 +10,7 @@ TsBridgeClass TsBridge;
 #include <usb/usb_host.h>
 #include <freertos/stream_buffer.h>
 #include <driver/gpio.h>
+#include <esp_heap_caps.h>
 #include "ts_link.h"
 
 // -----------------------------------------------------------------------------
@@ -55,6 +56,7 @@ namespace {
     StreamBufferHandle_t s_fromEcu = nullptr;  // MS2 -> FT232 -> радио
 
     tslink::RadioLink s_link;
+    bool s_service = false;   // сервисный режим: без USB-хоста, с печатью состояния радио
 
     uint32_t ftdiDivisor(uint32_t baud) {
         // FT232R/FT232BM: базовая частота 3 МГц, дробная часть в 1/8
@@ -301,6 +303,7 @@ namespace {
     void radioTask(void*) {
         uint8_t buf[tslink::MAX_PAYLOAD];
         bool wasUp = false;
+        uint32_t lastDiagMs = 0;
         for (;;) {
             s_link.setLocalFlags(s_ftdiReady ? tslink::FLAG_ECU_READY : 0);
             s_link.poll();
@@ -308,6 +311,16 @@ namespace {
             if (up != wasUp) {
                 wasUp = up;
                 Serial.printf("[TS] Связь с ноутбуком: %s\n", up ? "есть" : "нет");
+            }
+            if (s_service && (uint32_t)(millis() - lastDiagMs) >= 2000) {
+                lastDiagMs = millis();
+                Serial.printf("[TS] HELLO %lu (ошибок %lu), принято кадров %lu, сосед %s, связь %s; "
+                              "память внутр. %u, PSRAM %u\n",
+                              (unsigned long)s_link.statHelloTx, (unsigned long)s_link.statHelloErr,
+                              (unsigned long)s_link.statRawRx, s_link.hasPeerNow() ? "да" : "нет",
+                              up ? "есть" : "нет",
+                              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
             }
             size_t n = xStreamBufferReceive(s_fromEcu, buf, sizeof(buf), pdMS_TO_TICKS(10));
             if (n == 0) continue;
@@ -336,13 +349,16 @@ void TsBridgeClass::init() {
     vbusOn = false;
 #endif
 
-    // Сервисный режим: кнопка удерживается при включении (не при пробуждении)
+    // Сервисный режим: кнопка удерживается при включении (не при пробуждении).
+    // USB-хост не запускается: монитор порта и прошивка по USB работают. Радио работает,
+    // и раз в 2 с в порт печатается его состояние (проверка связи с донглом на столе).
     if (!Power.wokeFromSleep() && digitalRead(PIN_BTN_NEXT) == LOW) {
         uint32_t t0 = millis();
         while (digitalRead(PIN_BTN_NEXT) == LOW && millis() - t0 < 1500) delay(10);
         if (millis() - t0 >= 1500) {
-            Serial.println("[TS] Сервисный режим: мост выключен, USB работает как монитор порта.");
-            return;
+            serviceMode = true;
+            s_service = true;
+            Serial.println("[TS] Сервисный режим: USB-хост выключен, USB работает как монитор порта. Радио включено.");
         }
     }
 
@@ -352,37 +368,59 @@ void TsBridgeClass::init() {
     s_outDone = xSemaphoreCreateBinary();
     if (!s_toEcu || !s_fromEcu || !s_ctrlDone || !s_outDone) {
         Serial.println("[TS] Нет памяти для моста.");
+        errStr = "NOMEM";
         return;
     }
 
+    Serial.printf("[TS] Свободно до Wi-Fi: внутр. %u, PSRAM %u\n",
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     if (!s_link.begin(tslink::ROLE_CAR, TS_LINK_NET_ID, TS_LINK_CHANNEL,
                       TS_LINK_PMK, TS_LINK_LMK, onRadioRx, TS_LINK_TX_POWER)) {
-        Serial.println("[TS] Ошибка запуска ESP-NOW.");
+        Serial.println("[TS] Ошибка запуска Wi-Fi / ESP-NOW.");
+        WiFi.mode(WIFI_OFF);
+        errStr = "ERR WIFI";
         return;
     }
-
-    Serial.println("[TS] Включаю USB-хост. Монитор порта по USB дальше недоступен.");
-    Serial.flush();
-    delay(20);
-
-    usb_host_config_t hc = {};
-    hc.skip_phy_setup = false;
-    hc.intr_flags = ESP_INTR_FLAG_LEVEL1;
-    if (usb_host_install(&hc) != ESP_OK) {
+    size_t freeInt = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    Serial.printf("[TS] Wi-Fi запущен, свободно внутр. %u\n", (unsigned)freeInt);
+    if (freeInt < TS_MIN_FREE_INTERNAL) {
+        // Без запаса ESP-NOW не выделит буферы пакетов и молча не выйдет в эфир
+        Serial.println("[TS] Мало внутренней памяти: мост не запущен.");
         s_link.end();
+        errStr = "NOMEM";
         return;
     }
-    xTaskCreatePinnedToCore(hostLibTask, "usb_host", 3072, nullptr, 5, &s_hostTask, 0);
 
-    usb_host_client_config_t cc = {};
-    cc.is_synchronous = false;
-    cc.max_num_event_msg = 5;
-    cc.async.client_event_callback = clientEventCb;
-    cc.async.callback_arg = nullptr;
-    if (usb_host_client_register(&cc, &s_client) != ESP_OK) return;
+    if (!serviceMode) {
+        Serial.println("[TS] Включаю USB-хост. Монитор порта по USB дальше недоступен.");
+        Serial.flush();
+        delay(20);
 
-    xTaskCreatePinnedToCore(devTask, "ts_dev", 4096, nullptr, 4, &s_devTask, 0);
-    xTaskCreatePinnedToCore(clientTask, "usb_client", 4096, nullptr, 5, &s_clientTask, 0);
+        usb_host_config_t hc = {};
+        hc.skip_phy_setup = false;
+        hc.intr_flags = ESP_INTR_FLAG_LEVEL1;
+        if (usb_host_install(&hc) != ESP_OK) {
+            s_link.end();
+            errStr = "ERR USB";
+            return;
+        }
+        xTaskCreatePinnedToCore(hostLibTask, "usb_host", 3072, nullptr, 5, &s_hostTask, 0);
+
+        usb_host_client_config_t cc = {};
+        cc.is_synchronous = false;
+        cc.max_num_event_msg = 5;
+        cc.async.client_event_callback = clientEventCb;
+        cc.async.callback_arg = nullptr;
+        if (usb_host_client_register(&cc, &s_client) != ESP_OK) {
+            s_link.end();
+            errStr = "ERR USB";
+            return;
+        }
+
+        xTaskCreatePinnedToCore(devTask, "ts_dev", 4096, nullptr, 4, &s_devTask, 0);
+        xTaskCreatePinnedToCore(clientTask, "usb_client", 4096, nullptr, 5, &s_clientTask, 0);
+    }
     xTaskCreatePinnedToCore(radioTask, "ts_radio", 4096, nullptr, 4, &s_radioTask, 0);
 
     running = true;
@@ -406,13 +444,14 @@ bool TsBridgeClass::ecuReady() const { return running && s_ftdiReady; }
 bool TsBridgeClass::linkUp() const { return running && s_link.linkUp(); }
 
 const char* TsBridgeClass::statusStr() const {
-    if (!running) return "OFF";
+    if (!running) return errStr ? errStr : "OFF";
     bool ecu = s_ftdiReady;
     bool pc = s_link.linkUp();
-    if (ecu && pc) return "LINK";
-    if (pc) return "PC";
-    if (ecu) return "ECU";
-    return "WAIT";
+    const char* st = (ecu && pc) ? "LINK" : pc ? "PC" : ecu ? "ECU" : "WAIT";
+    if (!serviceMode) return st;
+    static char buf[12];
+    snprintf(buf, sizeof(buf), "SRV %s", st);
+    return buf;
 }
 
 #else  // мост выключен или чип без USB-хоста
