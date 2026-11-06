@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # Прошивка дэшборда E36_watch по USB без кнопок, когда мост TunerStudio занял USB.
 #
 # После загрузки прошивка ~2–3 с работает как USB-CDC (COM-порт), затем мост
@@ -9,7 +9,9 @@
 #
 # Запуск (после сборки arduino-cli compile --build-path <папка>):
 #   powershell -ExecutionPolicy Bypass -File extras\tools\flash_dash_usb.ps1 -BuildDir <папка сборки>
-# Затем переподключите USB-C дэшборда или нажмите RESET.
+# После записи прошивка запускается сама (сброс сторожевым таймером).
+# Если порт висит дольше ~10 с, а дэшборд не отвечает — чип в загрузчике:
+#   esptool --chip esp32s3 --port COM4 --before no-reset --after watchdog-reset read-mac
 # =============================================================================
 param(
     [Parameter(Mandatory = $true)][string]$BuildDir,
@@ -63,7 +65,9 @@ while (((Get-Date) - $t1).TotalSeconds -lt 10 -and -not ([System.IO.Ports.Serial
 }
 Start-Sleep -Milliseconds 500
 
-& $esptool --chip esp32s3 --port $Port --baud 921600 --before default-reset --after hard-reset write-flash -z `
+# --after watchdog-reset: сброс через RTS по USB-Serial-JTAG иногда оставляет S3 в загрузчике
+# (порт висит, прошивка не стартует); сброс сторожевым таймером всегда запускает прошивку.
+& $esptool --chip esp32s3 --port $Port --baud 921600 --before default-reset --after watchdog-reset write-flash -z `
     --flash-mode keep --flash-freq keep --flash-size keep `
     0x0 $boot 0x8000 $part 0xe000 $bootApp0 0x10000 $app |
     Select-String -NotMatch '^Writing at|^\s*$'

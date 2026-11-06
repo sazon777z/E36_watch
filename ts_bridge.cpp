@@ -8,6 +8,7 @@ TsBridgeClass TsBridge;
 #if TS_BRIDGE_ENABLED && SOC_USB_OTG_SUPPORTED
 
 #include <usb/usb_host.h>
+#include <soc/usb_dwc_struct.h>
 #include <freertos/stream_buffer.h>
 #include <driver/gpio.h>
 #include <esp_heap_caps.h>
@@ -27,8 +28,6 @@ static const uint8_t  FTDI_SIO_SET_LATENCY  = 9;
 static const size_t   USB_XFER_SIZE   = 512;   // буфер bulk IN/OUT
 static const size_t   STREAM_SIZE     = 4096;  // очереди байт в обе стороны
 
-static const uint32_t NOTE_NEW_DEV  = 0x01;
-static const uint32_t NOTE_DEV_GONE = 0x02;
 
 namespace {
     usb_host_client_handle_t s_client = nullptr;
@@ -38,6 +37,8 @@ namespace {
     TaskHandle_t s_radioTask = nullptr;
 
     volatile uint8_t s_newDevAddr = 0;
+    volatile bool s_evNew = false;    // клиент получил NEW_DEV
+    volatile bool s_evGone = false;   // клиент получил DEV_GONE
     usb_device_handle_t s_dev = nullptr;
     usb_transfer_t* s_ctrlXfer = nullptr;
     usb_transfer_t* s_inXfer = nullptr;
@@ -57,6 +58,25 @@ namespace {
 
     tslink::RadioLink s_link;
     bool s_service = false;   // сервисный режим: без USB-хоста, с печатью состояния радио
+
+    // Диагностика USB для экрана (монитор порта при работе моста недоступен):
+    // на каком шаге не удалось открыть FT232 (0 — ошибок не было)
+    enum : uint8_t {
+        FAIL_NONE = 0, FAIL_OPEN, FAIL_DESC, FAIL_NOT_FTDI, FAIL_NO_EP,
+        FAIL_CLAIM, FAIL_ALLOC, FAIL_SETUP, FAIL_SUBMIT
+    };
+    volatile uint8_t s_failStage = FAIL_NONE;
+    volatile uint8_t s_enumSeen = 0;    // опознание дошло до дескриптора устройства (раз, до 9)
+    volatile uint8_t s_newDevSeen = 0;  // событий NEW_DEV получено клиентом (до 9)
+    uint8_t s_lastTriedAddr = 0;        // адрес, который уже пробовали открыть (опрос списка)
+
+    // Вызывается при опознании, когда прочитан дескриптор устройства (задача usb_host)
+    bool enumFilterCb(const usb_device_desc_t* dd, uint8_t* bConfigurationValue) {
+        (void)dd;
+        if (s_enumSeen < 9) s_enumSeen++;
+        *bConfigurationValue = 1;
+        return true;
+    }
 
     uint32_t ftdiDivisor(uint32_t baud) {
         // FT232R/FT232BM: базовая частота 3 МГц, дробная часть в 1/8
@@ -105,11 +125,14 @@ namespace {
 
     void clientEventCb(const usb_host_client_event_msg_t* msg, void* arg) {
         (void)arg;
+        // Флаги, а не уведомления задачи: уведомление devTask занято ее потоковым буфером
+        // (xStreamBufferReceive ждет на нем же и сбрасывает его состояние)
         if (msg->event == USB_HOST_CLIENT_EVENT_NEW_DEV) {
+            if (s_newDevSeen < 9) s_newDevSeen++;
             s_newDevAddr = msg->new_dev.address;
-            if (s_devTask) xTaskNotify(s_devTask, NOTE_NEW_DEV, eSetBits);
+            s_evNew = true;
         } else if (msg->event == USB_HOST_CLIENT_EVENT_DEV_GONE) {
-            if (s_devTask) xTaskNotify(s_devTask, NOTE_DEV_GONE, eSetBits);
+            s_evGone = true;
         }
     }
 
@@ -180,13 +203,21 @@ namespace {
 
     void openDevice(uint8_t addr) {
         if (s_dev || addr == 0) return;
+        s_lastTriedAddr = addr;
         usb_device_handle_t dev = nullptr;
-        if (usb_host_device_open(s_client, addr, &dev) != ESP_OK) return;
+        if (usb_host_device_open(s_client, addr, &dev) != ESP_OK) { s_failStage = FAIL_OPEN; return; }
 
         const usb_device_desc_t* dd = nullptr;
         const usb_config_desc_t* cd = nullptr;
-        if (usb_host_get_device_descriptor(dev, &dd) != ESP_OK || !dd || dd->idVendor != FTDI_VID ||
+        if (usb_host_get_device_descriptor(dev, &dd) != ESP_OK || !dd ||
             usb_host_get_active_config_descriptor(dev, &cd) != ESP_OK || !cd) {
+            s_failStage = FAIL_DESC;
+            usb_host_device_close(s_client, dev);
+            return;
+        }
+        if (dd->idVendor != FTDI_VID) {
+            s_failStage = FAIL_NOT_FTDI;
+            Serial.printf("[TS] USB-устройство %04X:%04X — не FTDI, пропускаю.\n", dd->idVendor, dd->idProduct);
             usb_host_device_close(s_client, dev);
             return;
         }
@@ -208,16 +239,22 @@ namespace {
             }
         }
         if (!s_epIn || !s_epOut) {
+            s_failStage = FAIL_NO_EP;
             usb_host_device_close(s_client, dev);
             return;
         }
 
         s_dev = dev;
-        if (usb_host_interface_claim(s_client, s_dev, 0, 0) != ESP_OK) { closeDevice(); return; }
+        if (usb_host_interface_claim(s_client, s_dev, 0, 0) != ESP_OK) {
+            s_failStage = FAIL_CLAIM;
+            closeDevice();
+            return;
+        }
         s_claimed = true;
         if (usb_host_transfer_alloc(64, 0, &s_ctrlXfer) != ESP_OK ||
             usb_host_transfer_alloc(USB_XFER_SIZE, 0, &s_inXfer) != ESP_OK ||
             usb_host_transfer_alloc(USB_XFER_SIZE, 0, &s_outXfer) != ESP_OK) {
+            s_failStage = FAIL_ALLOC;
             closeDevice();
             return;
         }
@@ -233,13 +270,15 @@ namespace {
                   ftdiCtrl(FTDI_SIO_MODEM_CTRL, 0x0303, 0);                // DTR=1, RTS=1
         if (!ok) {
             Serial.println("[TS] Ошибка настройки FT232.");
+            s_failStage = FAIL_SETUP;
             closeDevice();
             return;
         }
 
         drainToEcu();
         s_ftdiReady = true;
-        if (!submitIn()) { closeDevice(); return; }
+        if (!submitIn()) { s_failStage = FAIL_SUBMIT; closeDevice(); return; }
+        s_failStage = FAIL_NONE;
         Serial.printf("[TS] FT232 ЭБУ подключен (PID %04X), %lu бод.\n",
                       dd->idProduct, (unsigned long)TS_ECU_BAUD);
     }
@@ -260,11 +299,38 @@ namespace {
     // Подключение/отключение FT232 и передача байт к ЭБУ
     void devTask(void*) {
         uint32_t lastInRetryMs = 0;
+        uint32_t lastScanMs = 0;
         for (;;) {
-            uint32_t note = 0;
-            xTaskNotifyWait(0, 0xFFFFFFFF, &note, 0);
-            if (note & NOTE_DEV_GONE) closeDevice();
-            if (note & NOTE_NEW_DEV) openDevice(s_newDevAddr);
+            if (s_evGone) {
+                s_evGone = false;
+                closeDevice();
+                s_lastTriedAddr = 0;
+            }
+            if (s_evNew) {
+                s_evNew = false;
+                openDevice(s_newDevAddr);
+            }
+
+            // Запасной путь: раз в секунду смотрим список опознанных устройств сами —
+            // на случай, если событие NEW_DEV не пришло (или FT232 был подключен до старта)
+            if (!s_dev && (uint32_t)(millis() - lastScanMs) >= 1000) {
+                lastScanMs = millis();
+                uint8_t addrs[4];
+                int num = 0;
+                if (usb_host_device_addr_list_fill(sizeof(addrs), addrs, &num) == ESP_OK) {
+                    // Опробованное устройство отключили — его адрес может достаться новому
+                    bool stillThere = false;
+                    for (int i = 0; i < num && i < (int)sizeof(addrs); i++) {
+                        if (addrs[i] == s_lastTriedAddr) stillThere = true;
+                    }
+                    if (!stillThere) s_lastTriedAddr = 0;
+                    for (int i = 0; i < num && i < (int)sizeof(addrs) && !s_dev; i++) {
+                        // Не-FTDI устройство не трогаем повторно; FT232 с ошибкой пробуем снова
+                        if (addrs[i] != 0 && (addrs[i] != s_lastTriedAddr || s_failStage != FAIL_NOT_FTDI))
+                            openDevice(addrs[i]);
+                    }
+                }
+            }
 
             // Если прием остановился из-за ошибки, перезапускаем его
             if (s_ftdiReady && !s_inBusy && (uint32_t)(millis() - lastInRetryMs) > 100) {
@@ -400,6 +466,9 @@ void TsBridgeClass::init() {
         usb_host_config_t hc = {};
         hc.skip_phy_setup = false;
         hc.intr_flags = ESP_INTR_FLAG_LEVEL1;
+#ifdef CONFIG_USB_HOST_ENABLE_ENUM_FILTER_CALLBACK
+        hc.enum_filter_cb = enumFilterCb;   // только для диагностики (код f на экране)
+#endif
         if (usb_host_install(&hc) != ESP_OK) {
             s_link.end();
             errStr = "ERR USB";
@@ -448,9 +517,22 @@ const char* TsBridgeClass::statusStr() const {
     bool ecu = s_ftdiReady;
     bool pc = s_link.linkUp();
     const char* st = (ecu && pc) ? "LINK" : pc ? "PC" : ecu ? "ECU" : "WAIT";
-    if (!serviceMode) return st;
-    static char buf[12];
-    snprintf(buf, sizeof(buf), "SRV %s", st);
+    static char buf[24];
+    if (serviceMode) {
+        snprintf(buf, sizeof(buf), "SRV %s", st);
+        return buf;
+    }
+    if (ecu) return st;
+    // FT232 не открыт — показываем, что видит USB-хост:
+    //   c0/c1 — есть ли подключенное устройство на линиях D+/D- (порт хоста);
+    //   d<n>  — сколько устройств у стека USB (включая опознаваемое сейчас);
+    //   f<n>  — сколько раз опознание дошло до дескриптора устройства;
+    //   n<n>  — сколько событий «новое устройство» получил мост;
+    //   e<n>  — шаг, на котором не открылся FT232 (0 — попыток с ошибкой не было)
+    usb_host_lib_info_t info = {};
+    usb_host_lib_info(&info);
+    snprintf(buf, sizeof(buf), "%s c%u d%d f%u n%u e%u", st, (unsigned)USB_DWC.hprt_reg.prtconnsts,
+             info.num_devices, (unsigned)s_enumSeen, (unsigned)s_newDevSeen, (unsigned)s_failStage);
     return buf;
 }
 

@@ -51,7 +51,7 @@ struct SmoothValue {
 // Метка, которая перерисовывается только при реальном изменении текста
 struct CachedLabel {
     lv_obj_t* obj = nullptr;
-    char last[32] = {0};
+    char last[40] = {0};
     bool initialized = false;
     void set(const char* text);
     void setf(const char* fmt, ...);
